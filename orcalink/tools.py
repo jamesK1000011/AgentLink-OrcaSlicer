@@ -166,6 +166,21 @@ def tools(out_dir=None, geo=None, guide=None):
             out += [[w[i], w[j], w[k]] for i, j, k in t]
         return out
 
+    def laid_out(proj, a, out):
+        """New objects from a cut or split stand where they were made, on top
+        of each other: OrcaSlicer arranges the plate when it is here (arrange
+        false leaves them)."""
+        if a.get("arrange", True) and not a.get("saveAs") and slicers.find("orcaslicer"):
+            proj.save()
+            try:
+                slicers.relayout("orcaslicer", proj.path, arrange=True)
+                proj.__init__(proj.path)
+                out = {**out, "arranged": True}
+                out.pop("next", None)
+            except (FileNotFoundError, RuntimeError) as e:
+                out = {**out, "arrangeFailed": str(e)[:200]}
+        return out
+
     # ---- orca_project ----------------------------------------------------------------------
     def orca_project(a):
         action = a.get("action", "info")
@@ -530,7 +545,7 @@ def tools(out_dir=None, geo=None, guide=None):
                 if keep in ("both", side) and piece:
                     made.append(proj.add_object(piece, f"{o['name']} {side}", 1)["object"])
             proj.remove_object(o["index"])
-            return {"cut": o["name"], "at": z, "axis": axis, "objects": made, "next": "orca_project arrange lays them out."}
+            return laid_out(proj, a, {"cut": o["name"], "at": z, "axis": axis, "objects": made, "next": "orca_project arrange lays them out."})
         elif op == "subdivide":
             return {**proj.subdivide(o["index"], a.get("part")), "op": op}
         elif op == "decompose_color":
@@ -556,7 +571,7 @@ def tools(out_dir=None, geo=None, guide=None):
                 if rest:
                     made.append(proj.add_object(rest, f"{o['name']} {i + 1}-{ny}", 1)["object"])
             proj.remove_object(o["index"])
-            return {"cut": o["name"], "objects": made, "next": "orca_project arrange lays them out."}
+            return laid_out(proj, a, {"cut": o["name"], "objects": made, "next": "orca_project arrange lays them out."})
         elif op in ("split", "split_objects"):
             comps = MG.pieces(m)
             if len(comps) < 2:
@@ -568,7 +583,7 @@ def tools(out_dir=None, geo=None, guide=None):
             else:
                 made = [proj.add_object(c, f"{o['name']} {i}", 1)["object"] for i, c in enumerate(comps, 1)]
                 proj.remove_object(o["index"])
-                return {"object": o["name"], "objects": made}
+                return laid_out(proj, a, {"object": o["name"], "objects": made})
         elif op == "merge":
             # Other objects' solid parts brought into this one, where they stand.
             inst = O.invert(o["instances"][0]["transform"])
