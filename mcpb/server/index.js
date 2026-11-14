@@ -189,13 +189,20 @@ async function main() {
   log(`serving ${app.version} from ${app.dir} with ${py}`)
   const started = Date.now()
   // -I: none of the person's PYTHONPATH or startup files in the server.
+  // Pipes both ways, passed through here: Claude Desktop's built-in Node
+  // does not hand its own stdin down to a child (the server read nothing
+  // and ended at once), so the lines are copied across.
   const child = spawn(py, ['-I', path.join(app.dir, 'orcalink_server.py'), '--out', OUT], {
-    stdio: ['inherit', 'inherit', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, PYTHONUNBUFFERED: '1', ORCALINK_VERSION: String(app.version || '') },
   })
+  process.stdin.pipe(child.stdin)
+  child.stdout.pipe(process.stdout)
+  child.stdin.on('error', () => {})
+  process.stdin.on('end', () => child.stdin.end())
   child.stderr.on('data', (d) => logFile.write(d))
   child.on('exit', (code, sig) => {
-    log(`server ended (${code ?? sig})`)
+    log(`server ended (${code ?? sig}) after ${Date.now() - started} ms`)
     if (code && Date.now() - started < 10000) markBad(app.version)
     process.exit(code ?? 1)
   })
