@@ -10,3 +10,20 @@ FAMILIES = [fam_freecad]
 CREDIT = None
 LICENSE = "LGPL-2.1-or-later"
 AGENTLINK_API = ">=1,<2"
+
+
+def _guides():
+    # The FreeCAD loop's guide beside Agent Link's own (guide_read { topic: "orca" }).
+    import os
+
+    from agentlink import tools as al_tools
+
+    reg = getattr(al_tools, "register_guides", None)
+    if reg is not None:
+        reg(os.path.join(os.path.dirname(os.path.abspath(__file__)), "freecad_guides"))
+
+
+try:
+    _guides()
+except Exception:  # noqa: BLE001 — an Agent Link without the hook: the tools still load
+    pass

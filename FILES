@@ -13,6 +13,7 @@ orcalink/data/orca-options.json
 orcalink/data/slicer-minimal.json
 orcalink/draco.py
 orcalink/fam_freecad.py
+orcalink/freecad_guides/orca.md
 orcalink/gcode_view.py
 orcalink/guides/orca.md
 orcalink/meshgen.py
