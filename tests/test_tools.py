@@ -121,7 +121,7 @@ class WithOrca(Calls):
         O.write_stl(stl, M.cylinder(10, 15))
         plate = os.path.join(self.d, "plate.stl")
         O.write_stl(plate, M.box(30, 20, 4))
-        r = self.ok("orca_project", {"action": "new", "files": [plate, stl], "path": "loop.3mf"})
+        r = self.ok("orca_project", {"action": "new", "files": [plate, stl], "path": "loop.3mf", "arrange": True})
         p = r["project"]
         self.assertEqual(len(r["objects"]), 2)
         self.ok("orca_project", {"action": "set", "path": p, "settings": {"sparse_infill_density": "20%"}})
@@ -133,7 +133,7 @@ class WithOrca(Calls):
         g = self.ok("gcode_read", {"path": s["gcode"][0], "layer": 3, "svg": True})
         self.assertTrue(os.path.isfile(g["svg"]))
         # The model changed: its part replaced, settings kept, sliced again.
-        O.write_stl(stl, M.cylinder(12, 15))
+        O.write_stl(stl, M.cylinder(10, 18))  # taller, the same footprint
         self.ok("orca_project", {"action": "replace", "path": p, "object": "peg.stl", "file": stl})
         self.ok("orca_slice", {"path": p})
         r = self.ok("orca_project", {"action": "mesh", "path": p, "object": "peg.stl", "op": "cut", "at": 7})
