@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+version = 1
+
+[[annotations]]
+path = ["README.md", "FILES", "REUSE.toml", "mcpb/manifest.json", "orcalink/guides/**", "orcalink/data/slicer-minimal.json", "tests/data/**", ".gitignore"]
+SPDX-FileCopyrightText = "Agent Link for OrcaSlicer contributors"
+SPDX-License-Identifier = "LGPL-2.1-or-later"
+
+# The table of OrcaSlicer's settings: each one's key, type, limits, allowed
+# values, category and preset, read from OrcaSlicer's PrintConfig.cpp by
+# ScanRuler's scripts/orca/audit/options_table.py — facts about the
+# settings, no labels, tooltips or help text (those stay OrcaSlicer's,
+# AGPL-3.0, github.com/SoftFever/OrcaSlicer).
+[[annotations]]
+path = "orcalink/data/orca-options.json"
+SPDX-FileCopyrightText = "Setting names and limits: OrcaSlicer contributors"
+SPDX-License-Identifier = "LGPL-2.1-or-later"

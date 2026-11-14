@@ -13,9 +13,9 @@ const root = path.resolve(here, '..', '..')
 const launcher = path.join(root, 'mcpb', 'server', 'index.js')
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'orcalink-launcher-'))
 
-function run(env) {
+function run(env, which = launcher, linger = 0) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [launcher], { env: { ...process.env, HOME: tmp, ORCALINK_LOG_DIR: path.join(tmp, 'logs'), AGENTLINK_OUT: path.join(tmp, 'out'), ...env }, stdio: ['pipe', 'pipe', 'pipe'] })
+    const child = spawn(process.execPath, [which], { env: { ...process.env, HOME: tmp, ORCALINK_LOG_DIR: path.join(tmp, 'logs'), AGENTLINK_OUT: path.join(tmp, 'out'), ...env }, stdio: ['pipe', 'pipe', 'pipe'] })
     const got = new Map()
     let buf = ''
     child.stdout.on('data', (d) => {
@@ -27,7 +27,9 @@ function run(env) {
         const m = JSON.parse(line) // only protocol lines reach stdout
         got.set(m.id, m)
         if (got.size === 3) {
-          child.kill()
+          // Claude keeps the extension running: linger gives the background
+          // update its time before this one is stopped.
+          setTimeout(() => child.kill(), linger)
           resolve(got)
         }
       }
@@ -60,4 +62,45 @@ check(JSON.parse(a.get(3).result.content[0].text).out === path.join(tmp, 'out'),
 // No Python anywhere it looks: an answer that says so, never silence.
 const b = await run({ ORCALINK_FROM: root, ORCALINK_PYTHON: '/nonexistent/python3', PATH: '/nonexistent' })
 check(/Python 3\.9/.test(b.get(1).result.instructions) && b.get(3).result.isError, 'without a Python it says what it needs')
-console.log('launcher: serves the checkout over stdio, and says what is missing without a Python')
+// The update path, against a stand-in GitHub serving this checkout as commit
+// aaa…: the first start serves the bundled copy and fetches it in the
+// background; the next start serves it. A commit that does not load (bbb…)
+// is kept out and the good one goes on serving.
+import http from 'node:http'
+const files = fs.readFileSync(path.join(root, 'FILES'), 'utf8').split('\n').filter(Boolean)
+let head = 'a'.repeat(40)
+const srv = http.createServer((req, res) => {
+  const u = decodeURIComponent(req.url.split('?')[0])
+  if (u.endsWith('/info/refs')) return res.end(`001e# service=git-upload-pack\n0000${'0'.repeat(4)}${head} refs/heads/main\n`)
+  const m = u.match(/^\/[^/]+\/[^/]+\/([0-9a-f]{40})\/(.+)$/)
+  if (!m) return res.writeHead(404).end()
+  const [, sha, f] = m
+  if (f === 'FILES') return res.end(files.join('\n') + '\n')
+  if (sha.startsWith('b') && f === 'orcalink/server.py') return res.end('raise SystemExit("broken on purpose")\n')
+  try {
+    res.end(fs.readFileSync(path.join(root, f)))
+  } catch {
+    res.writeHead(404).end()
+  }
+})
+await new Promise((r) => srv.listen(0, '127.0.0.1', r))
+const base = `http://127.0.0.1:${srv.address().port}`
+// The bundled copy: what build.sh puts in the extension's app/ folder.
+const ext = fs.mkdtempSync(path.join(os.tmpdir(), 'orcalink-ext-'))
+fs.mkdirSync(path.join(ext, 'server'))
+fs.copyFileSync(launcher, path.join(ext, 'server', 'index.js'))
+fs.cpSync(root, path.join(ext, 'app'), { recursive: true, filter: (p) => !p.includes('/.git') })
+const bundled = path.join(ext, 'server', 'index.js')
+const upd = { ORCALINK_PYTHON: process.env.PYTHON || 'python3', ORCALINK_GITHUB: base, ORCALINK_RAW: base }
+const cache = path.join(tmp, '.config', 'orcaslicer-agentlink')
+const status = async () => JSON.parse((await run(upd, bundled, 15000)).get(3).result.content[0].text)
+check((await status()).commit === 'bundled', 'the first start serves the bundled copy at once')
+for (let i = 0; i < 100 && !fs.existsSync(path.join(cache, 'app-' + head)); i++) await new Promise((r) => setTimeout(r, 200))
+check((await status()).commit === head.slice(0, 7), 'the next start serves the version fetched in the background')
+head = 'b'.repeat(40)
+await status()
+for (let i = 0; i < 100 && !JSON.parse(fs.readFileSync(path.join(cache, 'state.json'), 'utf8')).bad; i++) await new Promise((r) => setTimeout(r, 200))
+check(JSON.parse(fs.readFileSync(path.join(cache, 'state.json'), 'utf8')).bad.includes(head), 'a commit that does not load is kept out')
+check((await status()).commit === 'a'.repeat(7), 'the good version goes on serving')
+srv.close()
+console.log('launcher: serves the checkout over stdio, says what is missing without a Python, updates in the background and keeps a broken commit out')

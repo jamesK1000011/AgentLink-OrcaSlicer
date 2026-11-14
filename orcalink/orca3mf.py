@@ -186,35 +186,91 @@ def weld(tris):
     return verts, faces
 
 
+# Limits on what a file may hold: a model 100 m across, files and archives
+# that unpack to more than this are refused before they are read whole.
+MAX_COORD = 1e5
+MAX_BYTES = 512 * 1024 * 1024
+MAX_TRIANGLES = 20_000_000
+
+
+def checked(tris, name="the model"):
+    """The triangles, every coordinate a finite number within 100 m; else a
+    ProjectError saying so."""
+    import math
+
+    if len(tris) > MAX_TRIANGLES:
+        raise ProjectError(f"{name}: {len(tris)} triangles, more than {MAX_TRIANGLES} — simplify it first.")
+    for t in tris:
+        for p in t:
+            if len(p) != 3 or not all(isinstance(c, (int, float)) and math.isfinite(c) and abs(c) <= MAX_COORD for c in p):
+                raise ProjectError(f"{name}: a vertex {tuple(p)!r} is not a finite point within 100 m (mm units) — the file is damaged or not in millimetres.")
+    return tris
+
+
+def zip_members(z, what="the archive", only=None):
+    """The members of a ZIP read into memory, refused before reading when
+    they would unpack to more than MAX_BYTES or one is packed a thousand to
+    one (a ZIP bomb). only: a function choosing the members to read."""
+    infos = [i for i in z.infolist() if not i.is_dir() and (only is None or only(i.filename))]
+    total = sum(i.file_size for i in infos)
+    if total > MAX_BYTES:
+        raise ProjectError(f"{what} unpacks to {total // (1024 * 1024)} MB, more than {MAX_BYTES // (1024 * 1024)} MB: not opened.")
+    for i in infos:
+        if i.file_size > 1024 * 1024 and i.file_size > 1000 * max(1, i.compress_size):
+            raise ProjectError(f"{what}: {i.filename} is packed more than a thousand to one (a ZIP bomb?): not opened.")
+    return {i.filename: z.read(i) for i in infos}
+
+
 def read_stl(path):
     import struct
 
+    name = os.path.basename(path)
+    if os.path.getsize(path) > MAX_BYTES:
+        raise ProjectError(f"{name}: larger than {MAX_BYTES // (1024 * 1024)} MB.")
     with open(path, "rb") as f:
         data = f.read()
     if data[:5].lower() == b"solid" and b"facet" in data[:400]:
-        pts = [tuple(float(x) for x in m.groups()) for m in re.finditer(rb"vertex\s+(\S+)\s+(\S+)\s+(\S+)", data)]
-        return [pts[i:i + 3] for i in range(0, len(pts) - 2, 3)]
+        try:
+            pts = [tuple(float(x) for x in m.groups()) for m in re.finditer(rb"vertex\s+(\S+)\s+(\S+)\s+(\S+)", data)]
+        except ValueError:
+            raise ProjectError(f"{name}: a vertex is not three numbers — the ASCII STL is damaged.")
+        return checked([pts[i:i + 3] for i in range(0, len(pts) - 2, 3)], name)
+    if len(data) < 84:
+        raise ProjectError(f"{name}: too short to be an STL.")
     n = struct.unpack_from("<I", data, 80)[0]
+    if len(data) < 84 + 50 * n:
+        raise ProjectError(f"{name}: says {n} triangles but holds {(len(data) - 84) // 50} — the file is cut short.")
     tris = []
     for i in range(n):
         v = struct.unpack_from("<12f", data, 84 + 50 * i)
         tris.append([v[3:6], v[6:9], v[9:12]])
-    return tris
+    return checked(tris, name)
 
 
 def read_obj(path):
     """Triangles of an OBJ file (polygons fanned)."""
     vs, tris = [], []
+    name = os.path.basename(path)
+    if os.path.getsize(path) > MAX_BYTES:
+        raise ProjectError(f"{name}: larger than {MAX_BYTES // (1024 * 1024)} MB.")
     with open(path, encoding="utf-8", errors="replace") as f:
-        for line in f:
-            if line.startswith("v "):
-                vs.append(tuple(float(x) for x in line.split()[1:4]))
-            elif line.startswith("f "):
-                idx = [int(x.split("/")[0]) for x in line.split()[1:]]
-                idx = [i - 1 if i > 0 else len(vs) + i for i in idx]
-                for k in range(1, len(idx) - 1):
-                    tris.append([vs[idx[0]], vs[idx[k]], vs[idx[k + 1]]])
-    return tris
+        for n, line in enumerate(f, 1):
+            try:
+                if line.startswith("v "):
+                    xyz = tuple(float(x) for x in line.split()[1:4])
+                    if len(xyz) != 3:
+                        raise ValueError
+                    vs.append(xyz)
+                elif line.startswith("f "):
+                    idx = [int(x.split("/")[0]) for x in line.split()[1:]]
+                    idx = [i - 1 if i > 0 else len(vs) + i for i in idx]
+                    if not all(0 <= i < len(vs) for i in idx):
+                        raise IndexError
+                    for k in range(1, len(idx) - 1):
+                        tris.append([vs[idx[0]], vs[idx[k]], vs[idx[k + 1]]])
+            except (ValueError, IndexError):
+                raise ProjectError(f"{name}, line {n}: not a vertex of three numbers or a face of vertices given before it — the OBJ is damaged.")
+    return checked(tris, name)
 
 
 def write_stl(path, tris):
@@ -369,7 +425,7 @@ class Project:
     def __init__(self, path):
         self.path = path
         with zipfile.ZipFile(path) as z:
-            self.files = {n: z.read(n) for n in z.namelist()}
+            self.files = zip_members(z, os.path.basename(path))
         if MODEL not in self.files:
             raise ProjectError(f"{os.path.basename(path)}: no {MODEL} — not a 3MF project.")
         self.model = ET.fromstring(self.files[MODEL])
@@ -633,6 +689,7 @@ class Project:
         """A part added to an object from triangles in the object's own
         coordinates (a modifier, negative part, support blocker or enforcer,
         or another normal part); settings apply to it (modifiers)."""
+        checked(tris, name if isinstance(name, str) else "the mesh")
         if kind not in SUBTYPES:
             raise ProjectError(f"kind: one of {', '.join(SUBTYPES)}.")
         o = self.object(which)
@@ -691,6 +748,7 @@ class Project:
         """A part's mesh replaced (the FreeCAD body changed): triangles in the
         object's coordinates; the part's settings, kind and place stay. Paint
         is dropped unless keep_paint (then repainted by the caller)."""
+        checked(tris)
         o = self.object(which)
         p = self.part(o, part)
         verts, faces = weld(tris)
@@ -987,6 +1045,7 @@ class Project:
     def add_object(self, tris, name, plate=1, at=None, extruder=1):
         """A new object of one part from triangles (its source coordinates,
         as an STL of the body would have them), put on a plate."""
+        checked(tris, name if isinstance(name, str) else "the mesh")
         verts, faces = weld(tris)
         if not faces:
             raise ProjectError("the object's mesh has no triangles.")

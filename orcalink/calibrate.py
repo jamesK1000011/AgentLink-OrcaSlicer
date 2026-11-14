@@ -224,5 +224,63 @@ def retract_bands(path, bands):
     return changed
 
 
+def _key():
+    """This computer's key for calibration plans (made once, owner-only):
+    a plan in a project is acted on only when this computer signed it, so
+    a project from elsewhere cannot rewrite the sliced G-code."""
+    import os
+    import secrets
+
+    p = os.path.expanduser(os.environ.get("ORCALINK_PLAN_KEY") or "~/.config/orcaslicer-agentlink/plan-key")
+    try:
+        with open(p, encoding="utf-8") as f:
+            k = f.read().strip()
+        if k:
+            return k
+    except OSError:
+        pass
+    os.makedirs(os.path.dirname(p), mode=0o700, exist_ok=True)
+    k = secrets.token_hex(32)
+    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(k + "\n")
+    return k
+
+
+def _sig(body):
+    import hashlib
+    import hmac
+
+    return hmac.new(_key().encode(), body.encode(), hashlib.sha256).hexdigest()
+
+
 def dump(p):
-    return json.dumps(p, indent=1).encode()
+    body = json.dumps(p, sort_keys=True)
+    return json.dumps({"plan": body, "sig": _sig(body)}, indent=1).encode()
+
+
+# Retraction lengths a tower may step through (mm).
+RETRACT_MAX = 10.0
+
+
+def load_post(data):
+    """The post-slicing steps of a plan this computer signed, bounded; None
+    for a plan made elsewhere, unsigned, or out of bounds."""
+    import hmac
+
+    try:
+        w = json.loads(data)
+        body = w["plan"]
+        if not hmac.compare_digest(str(w.get("sig", "")), _sig(body)):
+            return None
+        post = json.loads(body).get("post") or {}
+    except (ValueError, KeyError, TypeError):
+        return None
+    bands = post.get("retraction")
+    if bands is not None:
+        try:
+            if not all(len(b) == 3 and 0 <= float(b[2]) <= RETRACT_MAX and float(b[0]) <= float(b[1]) for b in bands):
+                return None
+        except (TypeError, ValueError):
+            return None
+    return post

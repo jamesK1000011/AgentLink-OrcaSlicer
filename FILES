@@ -1,5 +1,6 @@
 LICENSE
 README.md
+REUSE.toml
 mcpb/build.sh
 mcpb/manifest.json
 mcpb/server/index.js
@@ -29,4 +30,5 @@ tests/test_meshgen.py
 tests/test_orca3mf.py
 tests/test_presets.py
 tests/test_printstrength.py
+tests/test_redteam.py
 tests/test_tools.py

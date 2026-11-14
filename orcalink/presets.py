@@ -114,7 +114,7 @@ def resolve(index, kind, name, _seen=None):
         raise PresetError(f"{kind} preset {name!r} inherits from itself ({' > '.join(seen + [name])}).")
     entries = index[kind].get(name)
     if not entries:
-        raise PresetError(f"No {kind} preset named {name!r}: slicer_presets list shows those there are.")
+        raise PresetError(f"No {kind} preset named {name!r}: the slicer's own presets list shows those there are (machine, process and filament names, exactly).")
     with open(entries[0]["path"], encoding="utf-8") as f:
         data = json.load(f)
     parent = data.get("inherits")
@@ -143,7 +143,7 @@ def bundle(slicer, machine, process, filament, name=None):
 
 def check_bundle(data):
     if not isinstance(data, dict) or data.get("agentlinkPresets") != 1:
-        raise PresetError("Not a presets bundle: one exported by slicer_presets export ({ agentlinkPresets: 1, slicer, machine, process, filament }).")
+        raise PresetError("Not a presets bundle: an Agent Link presets bundle ({ agentlinkPresets: 1, slicer, machine, process, filament }).")
     if data.get("slicer") not in ROOTS:
         raise PresetError(f"The bundle's slicer {data.get('slicer')!r} is not one of {', '.join(ROOTS)}.")
     for k in KINDS:
@@ -177,7 +177,7 @@ def load_saved(out_dir, name):
             continue
         if data.get("name") == name or os.path.splitext(os.path.basename(path))[0] == name:
             return check_bundle(data)
-    raise PresetError(f"No saved presets bundle named {name!r} in {folder(out_dir)}: slicer_presets import it first.")
+    raise PresetError(f"No saved presets bundle named {name!r} in {folder(out_dir)}: save one there first (FreeCAD Agent Link's slicer_presets export, or a bundle file put in that folder).")
 
 
 def saved(out_dir):
