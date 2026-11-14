@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# (From FreeCAD Agent Link's slicers.py: the slicers' command lines.)
+# (From Agent Link for FreeCAD's slicers.py: the slicers' command lines.)
 # More slicers by their command lines: PrusaSlicer (as slicer.py drives it,
 # or with a config bundle the person exported), OrcaSlicer and Bambu Studio
 # (their --slice command line, which takes JSON machine, process and
@@ -87,7 +87,7 @@ def slice_with(name, stl, gcode, settings, profiles=None, timeout=900, options=N
     LAST.clear()
     if name == "prusaslicer":
         if not profiles.get("config"):
-            raise RuntimeError("PrusaSlicer slicing lives in FreeCAD Agent Link; this server drives OrcaSlicer and Bambu Studio.")
+            raise RuntimeError("PrusaSlicer slicing lives in Agent Link for FreeCAD; this server drives OrcaSlicer and Bambu Studio.")
             return exe, "setup"
         args = [exe, "--export-gcode", "--load", profiles["config"], "--output", gcode, stl]
         run = _run(args, timeout)

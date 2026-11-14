@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// OrcaSlicer Agent Link as a Claude Desktop extension: the MCP server Claude
+// Agent Link for OrcaSlicer as a Claude Desktop extension: the MCP server Claude
 // starts. It brings Agent Link for OrcaSlicer up to date from GitHub (the
 // copy bundled with the extension when GitHub cannot be reached), finds a
 // Python 3.9 or newer already on this Mac, and runs orcalink_server.py over
@@ -15,7 +15,7 @@ const { spawn, spawnSync } = require('child_process')
 
 const HOME = os.homedir()
 const OWNER = 'jamesK1000011'
-const REPO = 'OrcaSlicer-AgentLink'
+const REPO = 'AgentLink-OrcaSlicer'
 const BRANCH = 'main'
 // Where the repository is read from (a local server stands in under test).
 const GH = process.env.ORCALINK_GITHUB || 'https://github.com'
@@ -181,7 +181,7 @@ async function main() {
   const py = findPython()
   if (!py) {
     log('no Python 3.9 or newer found')
-    serveError('OrcaSlicer Agent Link needs a Python 3.9 or newer on this Mac (Homebrew, python.org, the Xcode command line tools, or FreeCAD installed in /Applications).')
+    serveError('Agent Link for OrcaSlicer needs a Python 3.9 or newer on this Mac (Homebrew, python.org, the Xcode command line tools, or FreeCAD installed in /Applications).')
     return
   }
   const app = appDir()
@@ -212,5 +212,5 @@ async function main() {
 
 main().catch((e) => {
   log('failed:', e.stack || e.message)
-  serveError(`OrcaSlicer Agent Link could not start: ${e.message}`)
+  serveError(`Agent Link for OrcaSlicer could not start: ${e.message}`)
 })

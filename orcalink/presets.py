@@ -177,7 +177,7 @@ def load_saved(out_dir, name):
             continue
         if data.get("name") == name or os.path.splitext(os.path.basename(path))[0] == name:
             return check_bundle(data)
-    raise PresetError(f"No saved presets bundle named {name!r} in {folder(out_dir)}: save one there first (FreeCAD Agent Link's slicer_presets export, or a bundle file put in that folder).")
+    raise PresetError(f"No saved presets bundle named {name!r} in {folder(out_dir)}: save one there first (Agent Link for FreeCAD's slicer_presets export, or a bundle file put in that folder).")
 
 
 def saved(out_dir):

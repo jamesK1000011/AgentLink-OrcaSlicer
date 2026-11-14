@@ -7,7 +7,7 @@
 # G-code read back layer by layer.
 #
 # Plain Python. A CAD program adds what only it has through geo (see Geo):
-# FreeCAD Agent Link passes its bodies and faces, so a project is made from
+# Agent Link for FreeCAD passes its bodies and faces, so a project is made from
 # bodies, painted by faces and given back to the body after a change — the
 # loop between the two: design, slice, read the print back, revise, re-slice.
 
@@ -42,7 +42,7 @@ ACTIONS = ["new", "info", "set", "part_add", "part_remove", "replace", "place", 
 
 class Geo:
     """What a CAD program lends the tools. Every method may be left as is
-    (the tools then do without, or say what they need); FreeCAD Agent Link
+    (the tools then do without, or say what they need); Agent Link for FreeCAD
     fills them from its document.
 
     body(name) -> a body handle, given back to the other methods.
@@ -62,7 +62,7 @@ class Geo:
     name = None  # "FreeCAD" when there is one
 
     def body(self, name):
-        raise ToolError("unavailable", "body: bodies come from a CAD program (FreeCAD Agent Link); here give file (an STL, OBJ, 3MF, STEP …).")
+        raise ToolError("unavailable", "body: bodies come from a CAD program (Agent Link for FreeCAD); here give file (an STL, OBJ, 3MF, STEP …).")
 
     label = tris = bbox = face_normal = face_of = shape = None
 
@@ -616,7 +616,7 @@ def tools(out_dir=None, geo=None, guide=None):
             if op == "boolean" and a.get("consume", True):
                 proj.remove_part(o["index"], a["with"])
         elif op in ("simplify", "boolean"):
-            raise ToolError("unavailable", f"{op} needs a CAD kernel (FreeCAD Agent Link); fix, smooth, mirror, cut, cut_grid, split and merge work here.")
+            raise ToolError("unavailable", f"{op} needs a CAD kernel (Agent Link for FreeCAD); fix, smooth, mirror, cut, cut_grid, split and merge work here.")
         elif op == "fix":
             m = MG.fix(m)
         elif op == "smooth":
@@ -706,7 +706,7 @@ def tools(out_dir=None, geo=None, guide=None):
         Emboss and SVG tools. The drawing is extruded by the CAD kernel
         (geo.emboss) and set on the object's top."""
         if g.emboss is None:
-            raise ToolError("unavailable", "emboss needs a CAD kernel for the letters (FreeCAD Agent Link); here: part_add { file } an STL of the text.")
+            raise ToolError("unavailable", "emboss needs a CAD kernel for the letters (Agent Link for FreeCAD); here: part_add { file } an STL of the text.")
         o = proj.object(a["object"])
         depth = float(a.get("depth", 1.0))
         if not (a.get("text") or a.get("svg")):

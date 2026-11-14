@@ -1,12 +1,12 @@
 {
   "manifest_version": "0.2",
   "name": "orcaslicer-agentlink",
-  "display_name": "OrcaSlicer Agent Link",
+  "display_name": "Agent Link for OrcaSlicer",
   "version": "0.1.0",
   "description": "Drive OrcaSlicer from Claude, headless: projects changed at every level, painted, sliced, exported, the G-code read back, calibration prints built.",
-  "long_description": "Runs Agent Link for OrcaSlicer (github.com/jamesK1000011/OrcaSlicer-AgentLink) with a Python already on this Mac: Homebrew's, python.org's, the Xcode tools', or FreeCAD's own. Finds OrcaSlicer in /Applications. No FreeCAD needed; with FreeCAD Agent Link installed too, its orca group adds work from FreeCAD bodies. LGPL-2.1-or-later. OrcaSlicer itself is AGPL-3.0 and runs as its own program.",
+  "long_description": "Runs Agent Link for OrcaSlicer (github.com/jamesK1000011/AgentLink-OrcaSlicer) with a Python already on this Mac: Homebrew's, python.org's, the Xcode tools', or FreeCAD's own. Finds OrcaSlicer in /Applications. No FreeCAD needed; with Agent Link for FreeCAD installed too, its orca group adds work from FreeCAD bodies. LGPL-2.1-or-later. OrcaSlicer itself is AGPL-3.0 and runs as its own program.",
   "author": {
-    "name": "James"
+    "name": "jamesK1000011"
   },
   "license": "LGPL-2.1-or-later",
   "server": {

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Agent Link for OrcaSlicer's tests: plain Python, no FreeCAD. The oldest
 # Python it supports (a Mac's own 3.9) without a slicer, and 3.12 with the
-# latest OrcaSlicer's AppImage for the end-to-end loop. FreeCAD Agent Link's
+# latest OrcaSlicer's AppImage for the end-to-end loop. Agent Link for FreeCAD's
 # CI runs the FreeCAD side of the bridge with this checked out beside it.
 name: Agent Link for OrcaSlicer tests
 

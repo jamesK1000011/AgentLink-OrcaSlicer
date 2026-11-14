@@ -1,7 +1,7 @@
 # OrcaSlicer, headless
 
 ## The loop
-1. `orca_project { action: new, files, path }` makes the project from model files (STL, OBJ, 3MF, STEP …), with presets if given (`bundle`, or `machine`, `process`, `filament` names), minimal ones otherwise. Inside FreeCAD Agent Link, `bodies` makes it from FreeCAD bodies with their print setup's presets.
+1. `orca_project { action: new, files, path }` makes the project from model files (STL, OBJ, 3MF, STEP …), with presets if given (`bundle`, or `machine`, `process`, `filament` names), minimal ones otherwise. Inside Agent Link for FreeCAD, `bodies` makes it from FreeCAD bodies with their print setup's presets.
 2. Change it at any level with `orca_project set { scope project|object|part|range|plate, key, value | settings }` — every value is checked against OrcaSlicer's own table (`action: settings { query }` lists keys, types, limits, values). `slot` sets one filament's value.
 3. `orca_paint { object, kind supports|seam|fuzzy_skin|color, state, where }` paints the triangles where says: `normal [x, y, z]` (within degrees), `box`, `below` / `above` a height, in object coordinates. With FreeCAD, `faces` paints by face names.
 4. `orca_slice { path }` slices it; `gcode_read` shows layers, moves and views.

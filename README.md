@@ -1,12 +1,14 @@
 # Agent Link for OrcaSlicer
 
+> Not affiliated with or endorsed by the OrcaSlicer project. Get OrcaSlicer itself from its [official repository](https://github.com/OrcaSlicer/OrcaSlicer).
+
 OrcaSlicer, driven headless by an AI agent over the Model Context Protocol
 (MCP). The agent reads and changes OrcaSlicer projects (`.3mf`) at every level
 the slicer's window reaches, slices and exports them with OrcaSlicer's own
 command line, and reads the G-code back layer by layer. It is plain Python
 with no FreeCAD needed.
 
-[FreeCAD Agent Link](https://github.com/jamesK1000011/FreeCAD-AgentLink) uses
+[Agent Link for FreeCAD](https://github.com/jamesK1000011/AgentLink-FreeCAD) uses
 it for its design loop when both are installed: bodies go into the project,
 faces are painted by name, and walls, infill and layers come back for the
 strength check.
@@ -53,7 +55,7 @@ server:
   "mcpServers": {
     "orcaslicer": {
       "command": "python3",
-      "args": ["/path/to/OrcaSlicer-AgentLink/orcalink_server.py", "--out", "~/Documents/AgentLink"]
+      "args": ["/path/to/AgentLink-OrcaSlicer/orcalink_server.py", "--out", "~/Documents/AgentLink"]
     }
   }
 }

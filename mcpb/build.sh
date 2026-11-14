@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Build OrcaSlicer Agent Link as a Claude Desktop extension (.mcpb): this
+# Build Agent Link for OrcaSlicer as a Claude Desktop extension (.mcpb): this
 # manifest, the launcher, and the server's files (FILES, less tests and this
 # folder) as the copy that serves when GitHub cannot be reached.
 # Usage: mcpb/build.sh [OUT]
