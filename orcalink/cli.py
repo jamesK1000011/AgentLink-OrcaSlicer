@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# (From Agent Link for FreeCAD's slicers.py: the slicers' command lines.)
-# More slicers by their command lines: PrusaSlicer (as slicer.py drives it,
-# or with a config bundle the person exported), OrcaSlicer and Bambu Studio
+# The slicers' command lines (the one copy: Workshop for FreeCAD's Make
+# slices through this module too): PrusaSlicer (as prusa.py drives it, or
+# with a config bundle the person exported), OrcaSlicer and Bambu Studio
 # (their --slice command line, which takes JSON machine, process and
 # filament profiles: the person's own by path, or minimal ones written here
 # from the print setup). The G-code each writes is read back and the pauses
@@ -15,6 +15,8 @@ import shutil
 import subprocess
 import zipfile
 
+from . import prusa
+
 
 NAMES = ("prusaslicer", "orcaslicer", "bambustudio")
 PAUSE = {"prusaslicer": "M601", "orcaslicer": "M601", "bambustudio": "M400 U1"}
@@ -26,7 +28,7 @@ _EXE = {
 
 def find(name):
     if name == "prusaslicer":
-        return os.environ.get("AGENTLINK_SLICER") or shutil.which("prusa-slicer") or shutil.which("PrusaSlicer")
+        return prusa.find_slicer()
     env, names, places = _EXE[name]
     if os.environ.get(env):
         return os.environ[env]
@@ -87,7 +89,7 @@ def slice_with(name, stl, gcode, settings, profiles=None, timeout=900, options=N
     LAST.clear()
     if name == "prusaslicer":
         if not profiles.get("config"):
-            raise RuntimeError("PrusaSlicer slicing lives in Agent Link for FreeCAD; this server drives OrcaSlicer and Bambu Studio.")
+            prusa.slice_stl(stl, gcode, settings, timeout)
             return exe, "setup"
         args = [exe, "--export-gcode", "--load", profiles["config"], "--output", gcode, stl]
         run = _run(args, timeout)

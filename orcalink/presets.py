@@ -114,7 +114,7 @@ def resolve(index, kind, name, _seen=None):
         raise PresetError(f"{kind} preset {name!r} inherits from itself ({' > '.join(seen + [name])}).")
     entries = index[kind].get(name)
     if not entries:
-        raise PresetError(f"No {kind} preset named {name!r}: the slicer's own presets list shows those there are (machine, process and filament names, exactly).")
+        raise PresetError(f"No {kind} preset named {name!r}: slicer_presets list (or the slicer's own presets list) shows those there are — machine, process and filament names, exactly.")
     with open(entries[0]["path"], encoding="utf-8") as f:
         data = json.load(f)
     parent = data.get("inherits")

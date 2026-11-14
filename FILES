@@ -18,6 +18,7 @@ orcalink/orca3mf.py
 orcalink/presets.py
 orcalink/printstrength.py
 orcalink/protocol.py
+orcalink/prusa.py
 orcalink/server.py
 orcalink/tools.py
 orcalink_server.py
@@ -30,5 +31,6 @@ tests/test_meshgen.py
 tests/test_orca3mf.py
 tests/test_presets.py
 tests/test_printstrength.py
+tests/test_prusa.py
 tests/test_redteam.py
 tests/test_tools.py
