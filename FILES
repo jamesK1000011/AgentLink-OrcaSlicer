@@ -6,11 +6,13 @@ mcpb/manifest.json
 mcpb/server/index.js
 mcpb/test/launcher.test.mjs
 orcalink/__init__.py
+orcalink/agentlink_families.py
 orcalink/calibrate.py
 orcalink/cli.py
 orcalink/data/orca-options.json
 orcalink/data/slicer-minimal.json
 orcalink/draco.py
+orcalink/fam_freecad.py
 orcalink/gcode_view.py
 orcalink/guides/orca.md
 orcalink/meshgen.py
@@ -26,6 +28,7 @@ tests/data/orca-two-boxes.json
 tests/test_calibrate.py
 tests/test_draco.py
 tests/test_files.py
+tests/test_freecad_bridge.py
 tests/test_gcode_view.py
 tests/test_meshgen.py
 tests/test_orca3mf.py

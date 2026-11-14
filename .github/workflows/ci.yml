@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Agent Link for OrcaSlicer's tests: plain Python, no FreeCAD. The oldest
 # Python it supports (a Mac's own 3.9) without a slicer, and 3.12 with the
-# latest OrcaSlicer's AppImage for the end-to-end loop. Agent Link for FreeCAD's
-# CI runs the FreeCAD side of the bridge with this checked out beside it.
+# latest OrcaSlicer's AppImage for the end-to-end loop; and the FreeCAD side
+# of the bridge (orcalink.fam_freecad) on the newest FreeCAD with Agent Link
+# for FreeCAD beside it.
 name: Agent Link for OrcaSlicer tests
 
 on:
@@ -61,3 +62,49 @@ jobs:
         run: |
           python -c "import os, sys; sys.exit(0 if os.path.exists(os.environ['AGENTLINK_ORCASLICER']) else 1)"
           xvfb-run -a python -X faulthandler -m unittest discover -s tests -v 2>&1 | tail -n 300; exit ${PIPESTATUS[0]}
+
+  freecad:
+    name: freecad-bridge
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          repository: jamesK1000011/AgentLink-FreeCAD
+          path: agentlink-addon
+      - uses: actions/checkout@v5
+        with:
+          repository: jamesK1000011/AddonKit-FreeCAD
+          path: addonkit-lib
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: fc-newest
+          create-args: >-
+            -c conda-forge
+            freecad
+            python=3.11
+          cache-environment: true
+      - name: OrcaSlicer
+        timeout-minutes: 8
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update -qq && sudo apt-get -o Acquire::Retries=3 install -y -qq --no-install-recommends xvfb libopengl0 libegl1 libgl1 libwebkit2gtk-4.1-0 libgstreamer-plugins-base1.0-0 > /dev/null
+          name=$(gh api repos/OrcaSlicer/OrcaSlicer/releases/latest -q '[.assets[].name | select(endswith(".AppImage"))] | map(select(test("aarch64") | not)) | (map(select(test("2404"))) + .)[0]')
+          gh release download --repo OrcaSlicer/OrcaSlicer --pattern "$name" --dir "$RUNNER_TEMP/orca"
+          cd "$RUNNER_TEMP/orca" && chmod +x "$name" && "./$name" --appimage-extract > /dev/null
+          echo "AGENTLINK_ORCASLICER=$RUNNER_TEMP/orca/squashfs-root/AppRun" >> "$GITHUB_ENV"
+      - name: The bridge on FreeCAD
+        timeout-minutes: 15
+        run: |
+          code=0
+          export FREECAD_LIB=$CONDA_PREFIX/lib PYTHONPATH="$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/agentlink-addon:$GITHUB_WORKSPACE/addonkit-lib"
+          python -X faulthandler -m unittest discover -s tests -p test_freecad_bridge.py -v > "$RUNNER_TEMP/bridge.log" 2>&1 || code=$?
+          tail -n 200 "$RUNNER_TEMP/bridge.log"
+          echo "exit code: $code"
+          test "$code" -eq 0

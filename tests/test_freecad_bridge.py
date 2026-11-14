@@ -1,0 +1,234 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# The FreeCAD side of the bridge (orcalink.fam_freecad, through Agent Link
+# for FreeCAD), end to end on FreeCAD with the real command line: a project made from two bodies, changed at
+# each level, painted by face, sliced, read back, the body changed and its
+# part replaced, sliced again.
+
+import json
+import os
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+if os.environ.get("FREECAD_LIB"):
+    sys.path.append(os.environ["FREECAD_LIB"])
+try:
+    import FreeCAD  # noqa: F401
+
+    HAVE = True
+except ImportError:
+    HAVE = False
+
+from orcalink import cli as slicers  # noqa: E402
+
+try:
+    import agentlink.tools  # noqa: F401
+
+    AGENT = HAVE
+except ImportError:
+    AGENT = False
+
+
+@unittest.skipUnless(AGENT, "FreeCAD and Agent Link for FreeCAD are not both importable here")
+class OrcaLoop(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import Part
+
+        from agentlink.tools import Session, build_server
+
+        cls.dir = tempfile.mkdtemp()
+        cls.session = Session(out_dir=cls.dir)
+        cls.server = build_server(cls.session, lean=False)
+        for label, shape in (("Plate", Part.makeBox(30, 20, 6)), ("Peg", Part.makeBox(10, 10, 20))):
+            o = cls.session.doc.addObject("Part::Feature", label)
+            o.Label = label
+            o.Shape = shape
+        cls.session.doc.recompute()
+
+    def call(self, name, args=None):
+        r = self.server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": args or {}}})["result"]
+        return r.get("isError", False), json.loads(r["content"][0]["text"])
+
+    def ok(self, name, args=None):
+        err, r = self.call(name, args)
+        self.assertFalse(err, r)
+        return r
+
+    def test_settings_listing(self):
+        r = self.ok("orca_project", {"action": "settings", "query": "infill_density"})
+        self.assertTrue(any(x["key"] == "sparse_infill_density" for x in r["settings"]))
+
+    def test_loop(self):
+        if not slicers.find("orcaslicer"):
+            self.skipTest("no OrcaSlicer on this machine (the bake-off unpacks its AppImage)")
+        r = self.ok("orca_project", {"action": "new", "bodies": ["Plate", "Peg"], "path": "loop.3mf"})
+        p = r["project"]
+        print("\norca new:", json.dumps(r), flush=True)
+        info = self.ok("orca_project", {"action": "info", "path": p})
+        self.assertEqual([o["size"] for o in info["objects"]], [[30, 20, 6], [10, 10, 20]])
+        # Every level.
+        self.ok("orca_project", {"action": "set", "path": p, "settings": {"sparse_infill_density": 25, "wall_loops": 2}})
+        self.ok("orca_project", {"action": "set", "path": p, "object": "Peg", "key": "wall_loops", "value": 4})
+        self.ok("orca_project", {"action": "set", "path": p, "scope": "range", "object": "Peg", "zmin": 10, "zmax": 15, "settings": {"sparse_infill_density": "80%"}})
+        self.ok("orca_project", {"action": "part_add", "path": p, "object": "Plate", "kind": "modifier_part", "box": [8, 8, 6], "at": [15, 10, 3], "name": "dense", "settings": {"sparse_infill_density": "100%"}})
+        self.ok("orca_project", {"action": "gcode", "path": p, "z": 3.0, "kind": "custom", "gcode": "M117 agentlink-layer"})
+        err, e = self.call("orca_project", {"action": "set", "path": p, "key": "sparse_infill_density", "value": 300})
+        self.assertTrue(err)
+        # Paint the plate's top face's seam (Face6 of a Part box is its top).
+        r = self.ok("orca_paint", {"path": p, "object": "Plate", "kind": "seam", "faces": ["Face6"], "state": "block"})
+        self.assertGreater(r["triangles"], 0)
+        info = self.ok("orca_project", {"action": "info", "path": p, "object": "Peg"})
+        self.assertEqual(info["effective"]["wall_loops"], "4")
+        # Slice as it stands.
+        s1 = self.ok("orca_slice", {"path": p})
+        print("orca slice:", json.dumps({k: v for k, v in s1.items() if k != "gcode"}), flush=True)
+        with open(s1["gcode"][0]) as f:
+            text = f.read()
+        self.assertTrue("M117 agentlink-layer" in text, "the custom G-code is not in the sliced file")
+        g = self.ok("gcode_read", {"path": s1["gcode"][0], "z": 4.0, "view": "feature", "svg": True})
+        self.assertGreater(g["layers"], 20)
+        self.assertTrue(os.path.isfile(g["svg"]))
+        # The return leg: the peg grows in FreeCAD; its part follows, its settings stay.
+        import Part
+
+        self.session.body("Peg").Shape = Part.makeBox(10, 10, 30)
+        self.session.doc.recompute()
+        self.ok("orca_project", {"action": "replace", "path": p, "object": "Peg", "body": "Peg"})
+        info = self.ok("orca_project", {"action": "info", "path": p, "object": "Peg"})
+        self.assertEqual(info["size"], [10, 10, 30])
+        self.assertEqual(info["settings"]["wall_loops"], "4")
+        s2 = self.ok("orca_slice", {"path": p})
+        self.assertGreater(s2["layers"], s1["layers"])
+        # Read back for strength: the peg's own four walls count.
+        st = self.ok("orca_project", {"action": "strength", "path": p, "object": "Peg"})
+        self.assertEqual(st["settings"]["walls"], 4)
+        self.assertLess(st["strengthFactor"], 1.0)
+        f = self.ok("fea_setup", {"body": "Peg", "printed": {"project": p, "object": "Peg"}})
+        self.assertEqual(f["printSettings"]["settings"]["walls"], 4)
+
+    def test_window_tools(self):
+        # The window's object, plate, filament and mesh tools, then a slice.
+        if not slicers.find("orcaslicer"):
+            self.skipTest("no OrcaSlicer on this machine")
+        p = self.ok("orca_project", {"action": "new", "bodies": ["Plate"], "path": "more.3mf"})["project"]
+        steps = [
+            ("object_add", {"primitive": "cylinder", "size": [12, 12, 15]}),
+            ("instance", {"object": "cylinder", "count": 2}),
+            ("layer_heights", {"object": "cylinder", "adaptive": 0.5}),
+            ("brim_ears", {"object": "Plate", "points": [[0, 0], [30, 20]], "radius": 5}),
+            ("filament", {"like": 1, "color": "#3366FF"}),
+            ("set", {"object": "cylinder", "key": "extruder", "value": 2}),
+            ("mesh", {"object": "cylinder", "op": "simplify", "ratio": 0.8}),
+            ("object_add", {"primitive": "cube", "size": [10, 10, 10]}),
+            ("mesh", {"object": "cube", "op": "cut", "z": 4}),
+            ("arrange", {}),
+        ]
+        for action, args in steps:
+            r = self.ok("orca_project", {"action": action, "path": p, **args})
+            print(action, json.dumps(r)[:300], flush=True)
+        info = self.ok("orca_project", {"action": "info", "path": p})
+        names = [o["name"] for o in info["objects"]]
+        self.assertIn("cube upper", names)
+        self.assertEqual(len(info["filaments"]), 2)
+        for action, args in (("emboss", {"object": "Plate", "text": "AL", "size": 6, "depth": 0.6, "kind": "negative_part"}),
+                             ("lay_flat", {"object": "cube upper", "normal": [0, 0, 1]}),
+                             ("cli", {"options": {"uptodate": True}})):
+            r = self.ok("orca_project", {"action": action, "path": p, **args})
+            print(action, json.dumps(r)[:300], flush=True)
+        rep = self.ok("orca_slice", {"path": p, "export": "inspect_mesh"})
+        print("inspect_mesh", json.dumps(rep)[:400], flush=True)
+        self.ok("orca_slice", {"path": p, "export": "obj"})
+        r = self.ok("orca_paint", {"path": p, "object": "Plate", "kind": "supports", "faces": ["Face1"], "state": "enforce"})
+        self.assertGreater(r["triangles"], 0)
+        s = self.ok("orca_slice", {"path": p})
+        print("slice:", json.dumps({k: v for k, v in s.items() if k != "gcode"})[:600], flush=True)
+        self.assertGreater(s["layers"], 10)
+        self.ok("orca_slice", {"path": p, "export": "stls"})
+
+    def test_more_window_tools(self):
+        if not slicers.find("orcaslicer"):
+            self.skipTest("no OrcaSlicer on this machine")
+        import zipfile
+
+        from importlib import import_module as _im
+
+        def module(n):
+            return _im("orcalink." + n)
+
+        O = module("orca3mf")
+
+        p = self.ok("orca_project", {"action": "new", "bodies": ["Peg"], "path": "more2.3mf"})["project"]
+        stl = os.path.join(self.dir, "wedge.stl")
+        O.write_stl(stl, [[(0, 0, 0), (10, 0, 0), (0, 10, 0)], [(0, 0, 0), (0, 10, 0), (0, 0, 5)], [(0, 0, 0), (0, 0, 5), (10, 0, 0)], [(10, 0, 0), (0, 0, 5), (0, 10, 0)]])
+        zp = os.path.join(self.dir, "models.zip")
+        with zipfile.ZipFile(zp, "w") as z:
+            z.write(stl, "a/wedge.stl")
+        steps = [
+            ("object_add", {"file": zp}),
+            ("object_add", {"handy": "3DBenchy"}),
+            ("copy", {"object": "Peg"}),
+            ("scale_to_fit", {"object": "wedge"}),
+            ("mesh", {"object": "Peg", "op": "cut_grid", "size": [6, 6]}),
+            ("fill_bed", {"object": "wedge", "spacing": 40}),
+            ("plate_duplicate", {"plate": 1}),
+            ("plate_move", {"plate": 2, "to": 1}),
+        ]
+        for action, args in steps:
+            err, r = self.call("orca_project", {"action": action, "path": p, **args})
+            print(action, json.dumps(r)[:300], flush=True)
+            if action == "object_add" and args.get("handy") and err:
+                continue  # this OrcaSlicer may ship no handy models
+            self.assertFalse(err, r)
+        s = self.ok("orca_slice", {"path": p, "plate": 1})
+        g = self.ok("gcode_read", {"path": s["gcode"][0], "layer": 5, "move": 3, "svg": True, "show": ["travel", "retract", "seams"]})
+        self.assertIn("gcode", g["move"])
+        t = self.ok("gcode_read", {"path": s["gcode"][0], "toolpaths": True})
+        self.assertGreater(t["ribbons"], 10)
+        self.ok("orca_slice", {"path": p, "export": "amf"})
+        # Our Draco files read back by OrcaSlicer's own Draco decoder.
+        d = self.ok("orca_slice", {"path": p, "export": "drcs", "plate": 1})
+        drc = d["files"][0]
+        back = self.ok("orca_project", {"action": "object_add", "path": p, "file": drc, "plate": 2})
+        print("drc back", json.dumps(back)[:300], flush=True)
+        info = self.ok("orca_project", {"action": "info", "path": p})
+        self.assertTrue(any(o["name"].endswith(".stl") and o.get("size") for o in info["objects"]))
+        sv = self.ok("orca_slice", {"path": p, "export": "svg", "plate": 1})
+        self.assertGreater(sv["layers"], 10)
+
+    def test_calibrations(self):
+        if not slicers.find("orcaslicer"):
+            self.skipTest("no OrcaSlicer on this machine")
+        for kind, params in (("pressure_advance", {"start": 0, "end": 0.04, "step": 0.002}), ("temperature", {"start": 220, "end": 200}),
+                             ("flow", {"pass": 1}), ("retraction", {"start": 0.2, "end": 1.0, "step": 0.2}), ("max_flow", {"start": 5, "end": 10, "step": 1})):
+            err, r = self.call("orca_calibrate", {"kind": kind, "params": params, "path": f"cal-{kind}.3mf"})
+            print("calibrate", kind, json.dumps(r)[:500], flush=True)
+            self.assertFalse(err, r)
+            info = self.ok("orca_project", {"action": "info", "path": r["project"]})
+            if kind == "pressure_advance":
+                self.assertAlmostEqual(info["objects"][0]["size"][2], 21, delta=1.5)
+                self.assertEqual(len(info["gcodes"]["1"]["items"] if "1" in info["gcodes"] else info["gcodes"][1]["items"]), 21)
+            if kind == "flow":
+                self.assertGreater(len(info["objects"]), 5)
+            if kind in ("pressure_advance", "retraction"):
+                sl = self.ok("orca_slice", {"path": r["project"]})
+                with open(sl["gcode"][0]) as f:
+                    text = f.read()
+                if kind == "pressure_advance":
+                    self.assertIn("M900 K0.02", text)
+                else:
+                    self.assertIn("retraction tower 0.6", text)
+
+    def test_slice_with_two_bodies(self):
+        # Minimal profiles, two filaments: OrcaSlicer 2.5 refused these when
+        # a per-filament list was shorter than the filament count.
+        if not slicers.find("orcaslicer"):
+            self.skipTest("no OrcaSlicer on this machine")
+        self.call("setup", {"action": "add", "type": "print", "bodies": ["Plate", "Peg"], "settings": {"layerHeight": 0.2}})
+        r = self.ok("slice_with", {"bodies": ["Plate", "Peg"], "slicer": "orcaslicer"})
+        self.assertGreater(r["layers"], 10)
+
+
+if __name__ == "__main__":
+    unittest.main()

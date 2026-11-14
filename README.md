@@ -8,10 +8,10 @@ the slicer's window reaches, slices and exports them with OrcaSlicer's own
 command line, and reads the G-code back layer by layer. It is plain Python
 with no FreeCAD needed.
 
-[Agent Link for FreeCAD](https://github.com/jamesK1000011/AgentLink-FreeCAD) uses
-it for its design loop when both are installed: bodies go into the project,
-faces are painted by name, and walls, infill and layers come back for the
-strength check.
+[Agent Link for FreeCAD](https://github.com/jamesK1000011/AgentLink-FreeCAD) loads
+its design loop from here when both are installed (`orcalink/agentlink_families.py`,
+the only part that touches FreeCAD): bodies go into the project, faces are
+painted by name, and walls, infill and layers come back for the strength check.
 
 ## What it does
 
