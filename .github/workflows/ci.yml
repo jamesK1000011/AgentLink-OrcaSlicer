@@ -29,6 +29,11 @@ jobs:
         with:
           python-version: '3.9'
       - run: python -X faulthandler -m unittest discover -s tests -v 2>&1 | tail -n 200; exit ${PIPESTATUS[0]}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: The Claude extension's launcher
+        run: PYTHON=python node mcpb/test/launcher.test.mjs && sh mcpb/build.sh "$RUNNER_TEMP/orcaslicer-agentlink.mcpb"
 
   orca:
     name: python-3.12-orcaslicer

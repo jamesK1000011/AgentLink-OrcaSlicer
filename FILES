@@ -1,5 +1,9 @@
 LICENSE
 README.md
+mcpb/build.sh
+mcpb/manifest.json
+mcpb/server/index.js
+mcpb/test/launcher.test.mjs
 orcalink/__init__.py
 orcalink/calibrate.py
 orcalink/cli.py

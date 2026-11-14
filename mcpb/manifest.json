@@ -1,0 +1,58 @@
+{
+  "manifest_version": "0.2",
+  "name": "orcaslicer-agentlink",
+  "display_name": "OrcaSlicer Agent Link",
+  "version": "0.1.0",
+  "description": "Drive OrcaSlicer from Claude, headless: projects changed at every level, painted, sliced, exported, the G-code read back, calibration prints built.",
+  "long_description": "Runs Agent Link for OrcaSlicer (github.com/jamesK1000011/OrcaSlicer-AgentLink) with a Python already on this Mac: Homebrew's, python.org's, the Xcode tools', or FreeCAD's own. Finds OrcaSlicer in /Applications. No FreeCAD needed; with FreeCAD Agent Link installed too, its orca group adds work from FreeCAD bodies. LGPL-2.1-or-later. OrcaSlicer itself is AGPL-3.0 and runs as its own program.",
+  "author": {
+    "name": "James"
+  },
+  "license": "LGPL-2.1-or-later",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/index.js"
+      ],
+      "env": {
+        "AGENTLINK_OUT": "${user_config.out_dir}",
+        "AGENTLINK_ORCASLICER": "${user_config.orca_app}",
+        "ORCALINK_UPDATE": "${user_config.auto_update}"
+      }
+    }
+  },
+  "user_config": {
+    "out_dir": {
+      "type": "directory",
+      "title": "Output folder",
+      "description": "Where projects, G-code and exports go when a path is not given in full.",
+      "default": "${HOME}/AgentLink",
+      "required": false
+    },
+    "orca_app": {
+      "type": "string",
+      "title": "OrcaSlicer",
+      "description": "Only if OrcaSlicer is not in /Applications: the path to its executable (OrcaSlicer.app/Contents/MacOS/OrcaSlicer).",
+      "default": "",
+      "required": false
+    },
+    "auto_update": {
+      "type": "boolean",
+      "title": "Keep it up to date",
+      "description": "At each start, fetch the newest Agent Link for OrcaSlicer from GitHub when it has changed.",
+      "default": true,
+      "required": false
+    }
+  },
+  "compatibility": {
+    "platforms": [
+      "darwin"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

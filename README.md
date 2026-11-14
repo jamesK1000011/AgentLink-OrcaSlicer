@@ -36,6 +36,15 @@ Starting a print is always the person's call.
 
 ## Install
 
+**Claude Desktop on a Mac:** install `orcaslicer-agentlink.mcpb` (built by
+`mcpb/build.sh`, or from a release) by opening it. The extension finds a
+Python 3.9 or newer already on the Mac (Homebrew's, python.org's, the Xcode
+command line tools', or FreeCAD's own) and OrcaSlicer in /Applications. At
+each start it fetches the newest version of this repository when it has
+changed. It talks to Claude only over its own pipes and opens no network port.
+
+**Any MCP client:**
+
 You need Python 3.9 or newer and OrcaSlicer. Point an MCP client at the
 server:
 

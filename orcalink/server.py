@@ -30,7 +30,7 @@ def build(out_dir):
 
     def orca_status(a):
         exe = cli.find("orcaslicer")
-        out = {"version": VERSION, "out": out_dir, "orcaslicer": exe, "bambustudio": cli.find("bambustudio")}
+        out = {"version": VERSION, **({"commit": os.environ["ORCALINK_VERSION"][:7]} if os.environ.get("ORCALINK_VERSION") else {}), "out": out_dir, "orcaslicer": exe, "bambustudio": cli.find("bambustudio")}
         if exe:
             from . import presets
 
@@ -58,7 +58,7 @@ def main(argv=None):
     sys.stdout = sys.stderr  # stray prints never reach the protocol
 
     def write(line):
-        out.write(line + "\n")
+        out.write(line if line.endswith("\n") else line + "\n")
         out.flush()
 
     serve_lines(server, sys.stdin.readline, write)
