@@ -10,12 +10,13 @@ import struct
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 import zlib
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
-from orcalink import orca3mf as O, texdisp as T  # noqa: E402
+from orcalink import cli, orca3mf as O, texdisp as T  # noqa: E402
 from orcalink.server import build  # noqa: E402
 from test_orca3mf import sample  # noqa: E402
 
@@ -148,6 +149,42 @@ class Tool(unittest.TestCase):
         with zipfile.ZipFile(self.p) as z:
             self.assertFalse([n for n in z.namelist() if n.startswith(T.DIR)])
             self.assertNotIn("texture_displacement", z.read(O.SETTINGS).decode())
+
+    def test_slice_bakes_the_texture(self):
+        # orca_slice hands a textured project to OrcaSlicer with --bake-texture-displacement, which bakes the
+        # relief as the panel's Bake does; a project without a texture stack is sliced as before.
+        self.assertFalse(O.Project(self.p).has_textures())
+        self.assertEqual(self.sliced_with(), [])
+        r = self.ok({"texture": {"image": "dots.png", "depth": 0.6}, "where": {"normal": [0, 0, 1]}})
+        self.assertIn("orca_slice bakes the relief", r["note"])
+        self.assertTrue(O.Project(self.p).has_textures())
+        self.assertEqual(self.sliced_with(), ["--bake-texture-displacement"])
+        # A slicer without the option slices flat, and says so.
+        res = self.slice(supports=False)
+        self.assertIn("--bake-texture-displacement", res["warning"])
+
+    def slice(self, supports=True):
+        """orca_slice against a stand-in OrcaSlicer that writes an empty G-code; gives the result and the
+        command line it was run with."""
+        seen = []
+
+        def run(args, timeout, cwd=None):
+            seen.append(args)
+            with open(os.path.join(cwd, "plate_1.gcode"), "w") as f:
+                f.write("; stand-in\n")
+            return None
+
+        with mock.patch.object(cli, "find", return_value="/stand-in/orca-slicer"), \
+                mock.patch.object(cli, "supports", side_effect=lambda exe, opt: supports and opt == "--bake-texture-displacement"), \
+                mock.patch.object(cli, "_run", side_effect=run), mock.patch.object(cli, "results", return_value={}):
+            r = self.server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "orca_slice", "arguments": {"path": "p.3mf", "keep": False}}})["result"]
+        out = json.loads(r["content"][0]["text"])
+        self.assertFalse(r.get("isError", False), out)
+        out["_args"] = seen[0]
+        return out
+
+    def sliced_with(self):
+        return [a for a in self.slice()["_args"] if a == "--bake-texture-displacement"]
 
     def test_refusals(self):
         self.refused({"texture": {"depth": 1}})  # a new layer needs a picture

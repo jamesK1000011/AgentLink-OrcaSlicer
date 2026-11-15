@@ -27,7 +27,9 @@ The first release, 0.1.0, is being prepared.
 - Texture displacement: `orca_paint` kind `texture` writes the layer stack,
   images and per-triangle masks exactly as OrcaSlicer's Texture
   Displacement panel saves them, checked byte for byte against the panel's
-  own serialiser. The relief itself is still made by the panel's Bake.
+  own serialiser. `orca_slice` bakes the relief as it slices, by OrcaSlicer's
+  `--bake-texture-displacement` (the agent-cli build); colour layers give
+  relief only. A slicer without the option slices flat and says so.
 
 ### Changed
 

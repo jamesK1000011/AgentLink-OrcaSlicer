@@ -5,7 +5,7 @@ These tools are Agent Link for OrcaSlicer's (a separate add-on, github.com/james
 ## The loop
 1. `orca_project { action: new, bodies, path }` makes the project from FreeCAD bodies with the print setup's presets (`slicer_presets use` first, else minimal ones).
 2. Change it at any level with `orca_project set { scope project|object|part|range|plate, key, value | settings }` — every value is checked against OrcaSlicer's own table (`action: settings { query }` lists keys, types, limits, values). `slot` sets one filament's value.
-3. `orca_paint { object, faces, kind supports|seam|fuzzy_skin|color, state }` paints by FreeCAD face names; `where { normal, within, box, below, above }` paints by direction or place instead. `kind texture` with `texture { image | library, depth, tileSize, … }` adds a Texture Displacement layer on those faces; the relief is made by Bake in OrcaSlicer's window.
+3. `orca_paint { object, faces, kind supports|seam|fuzzy_skin|color, state }` paints by FreeCAD face names; `where { normal, within, box, below, above }` paints by direction or place instead. `kind texture` with `texture { image | library, depth, tileSize, … }` adds a Texture Displacement layer on those faces; `orca_slice` bakes the relief as it slices (colour layers give relief only).
 4. `orca_slice { path }` slices it; `gcode_read` shows layers, moves and views.
 5. The return leg: change the body in FreeCAD, then `orca_project replace { object, body }` — its settings, modifiers and place stay; paint goes and is painted again.
 6. `orca_project strength { object }` and `fea_setup { printed: { project, object } }` read the walls, infill and layers back into the strength study (a feasibility estimate).

@@ -842,6 +842,16 @@ class Project:
                 return x
         raise ProjectError(f"{p['name']}: no part entry in the project's settings (not written by OrcaSlicer).")
 
+    def has_textures(self):
+        """Whether any part carries a texture displacement stack — what
+        OrcaSlicer's --bake-texture-displacement bakes before slicing."""
+        for el in self._settings_objects().values():
+            for x in el.findall("part"):
+                path = _meta(x).get(TD.KEY)
+                if path and path in self.files:
+                    return True
+        return False
+
     def textures(self, which, part=None):
         """(layers, options) of a part's texture displacement stack; ([], the
         defaults) when it has none."""

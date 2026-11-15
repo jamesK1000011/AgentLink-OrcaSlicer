@@ -988,8 +988,9 @@ def tools(out_dir=None, geo=None, guide=None):
             out["triangles"] = sum(1 for x in attrs.get(TD.attr(slot)) or [] if x)
             if not out["triangles"]:
                 out["warning"] = "No triangle carries this layer yet: paint it with where (or faces)."
-        out["note"] = ("Saved as OrcaSlicer's Texture Displacement panel saves it. The relief is made when the panel's Bake runs in the "
-                       "window; until then orca_slice slices the part without it.")
+        out["note"] = ("Saved as OrcaSlicer's Texture Displacement panel saves it. orca_slice bakes the relief into the part as it "
+                       "slices (OrcaSlicer's --bake-texture-displacement; colour layers give relief only); the panel's Bake does the "
+                       "same in the window.")
         return out
 
     # ---- orca_paint -------------------------------------------------------------------------
@@ -1170,8 +1171,12 @@ def tools(out_dir=None, geo=None, guide=None):
         try:
             if what == "gcode":
                 plate = int(a.get("plate", 0))
+                # Painted texture displacement is only relief once baked: the fork's --bake-texture-displacement
+                # bakes it the way the panel's Bake does, before slicing. A slicer without the option slices flat.
+                textured = O.Project(p).has_textures()
+                bake = textured and slicers.supports(slicers.find("orcaslicer"), "--bake-texture-displacement")
                 exe, found = slicers.slice_project("orcaslicer", p, out_dir, export=os.path.splitext(p)[0] + "-sliced.3mf" if a.get("keep", True) else None, plate=plate,
-                                                   options=a.get("options"))
+                                                   options=a.get("options"), bake_textures=bake)
                 from . import calibrate as C
 
                 pr = O.Project(p)
@@ -1187,6 +1192,11 @@ def tools(out_dir=None, geo=None, guide=None):
                 res = {"gcode": found, **slicers.read_gcode(found[0]), **slicers.LAST, **done, **gcode_review(pr)}
                 if os.path.isfile(os.path.splitext(p)[0] + "-sliced.3mf"):
                     res["sliced"] = os.path.splitext(p)[0] + "-sliced.3mf"
+                if bake:
+                    res["textures"] = "baked: the painted texture displacement is relief in this G-code (colour layers as relief only)"
+                elif textured:
+                    res["warning"] = ("This OrcaSlicer has no --bake-texture-displacement, so the painted texture displacement was sliced flat: "
+                                      "use the agent-cli build, or press Bake in the Texture Displacement panel and save.")
                 res["next"] = "gcode_read { path } shows it layer by layer; starting the print is the person's call."
                 return res
             if what in ("drc", "drcs"):
@@ -1291,7 +1301,7 @@ def tools(out_dir=None, geo=None, guide=None):
             "texture (a raised or engraved surface pattern from a picture, as the Texture Displacement panel makes: texture { image (a PNG; light is raised) or library (a texture OrcaSlicer ships, like \"Knurl\"), "
             "depth mm 0.01-10, tileSize mm 0.2-200, rotation 0-360, offset [u, v], invert, midlevel 0-10, smoothing 0-1, edgeFade 0.02-1|false, repeat, mirror, projection triplanar|cylindrical|spherical|lscm|view (view { right, up }), "
             "seamAngle 5-90, blend add|subtract|multiply|divide|override, colors, name; slot edits or (remove) removes a layer, up to 8 }, textureOptions { displaceBorder, smooth false|{ strength, passes, skipBorder }, pipeline v2|classic, refine, maxTriangles, relocate, regularize, colorMix, mixCount, denoise }; "
-            "the relief itself is made by the panel's Bake in the window). Which triangles: where { normal [x, y, z], within (degrees, default 20), box [[x0, y0, z0], [x1, y1, z1]], below z, above z } in object coordinates, or faces [\"Face3\", …] of the CAD body it was made from (body; found by name otherwise). { path, object, part, state, replace (unpainted triangles cleared), clear }.",
+            "orca_slice bakes the relief as it slices, colour layers as relief only). Which triangles: where { normal [x, y, z], within (degrees, default 20), box [[x0, y0, z0], [x1, y1, z1]], below z, above z } in object coordinates, or faces [\"Face3\", …] of the CAD body it was made from (body; found by name otherwise). { path, object, part, state, replace (unpainted triangles cleared), clear }.",
             obj({"path": {"type": "string"}, "object": {"type": ["string", "integer"]}, "part": {"type": ["string", "integer"]}, "body": {"type": "string"},
                  "kind": {"type": "string", "enum": list(O.PAINT) + ["texture"]}, "faces": {"type": "array", "items": {"type": "string"}}, "where": WHERE, "state": {}, "replace": {"type": "boolean"}, "clear": {"type": "boolean"},
                  "texture": {"type": "object"}, "textureOptions": {"type": "object"}},
@@ -1307,7 +1317,7 @@ def tools(out_dir=None, geo=None, guide=None):
         ),
         Tool(
             "orca_slice",
-            "Slice an OrcaSlicer project as it stands, by its command line (headless): { path, plate (0 all), keep (the sliced .3mf, default true) } gives time, filament, warnings and statistics; export stl|stls|obj|amf|drc|drcs|svg (solid slices, a layer a group)|settings|slicedata|3mf writes those instead, inspect_mesh|inspect_paint|info gives Orca's own report; options (timelapse, skip_objects \"3,5\", allow_mix_temp, allow_multicolor_oneplate, no_check, mtcpp, mstpp) go to the slice.",
+            "Slice an OrcaSlicer project as it stands, by its command line (headless): { path, plate (0 all), keep (the sliced .3mf, default true) } gives time, filament, warnings and statistics; export stl|stls|obj|amf|drc|drcs|svg (solid slices, a layer a group)|settings|slicedata|3mf writes those instead, inspect_mesh|inspect_paint|info gives Orca's own report; options (timelapse, skip_objects \"3,5\", allow_mix_temp, allow_multicolor_oneplate, no_check, mtcpp, mstpp) go to the slice; texture displacement painted with orca_paint is baked into the parts first.",
             obj({"path": {"type": "string"}, "plate": {"type": "integer"}, "keep": {"type": "boolean"}, "export": {"type": "string", "enum": ["gcode", "stl", "stls", "obj", "amf", "svg", "drc", "drcs", "settings", "slicedata", "3mf", "inspect_mesh", "inspect_paint", "info"]}, "options": {"type": "object"}, "name": {"type": "string"}, "layerHeight": {"type": "number"}}, ["path"]),
             orca_slice,
         ),

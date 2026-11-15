@@ -162,11 +162,12 @@ SLICE_FLAGS = {"timelapse": "--enable-timelapse", "allow_mix_temp": "--allow-mix
 SLICE_VALUES = {"skip_objects": "--skip-objects", "mtcpp": "--mtcpp", "mstpp": "--mstpp", "clone_objects": "--clone-objects", "load_filament_ids": "--load-filament-ids"}
 
 
-def slice_project(name, threemf, out_dir, timeout=900, export=None, plate=0, options=None):
+def slice_project(name, threemf, out_dir, timeout=900, export=None, plate=0, options=None, bake_textures=False):
     """A project (.3mf) sliced as it stands — its own presets, settings,
     plates and objects, as the person left them in the slicer's window.
-    export: a .3mf path for the sliced project. Returns (exe, [G-code
-    paths]) and fills LAST."""
+    export: a .3mf path for the sliced project. bake_textures: bake painted
+    texture displacement into the parts first (--bake-texture-displacement).
+    Returns (exe, [G-code paths]) and fills LAST."""
     exe = find(name)
     if not exe:
         raise FileNotFoundError(f"{name} is not on this computer.")
@@ -179,6 +180,8 @@ def slice_project(name, threemf, out_dir, timeout=900, export=None, plate=0, opt
         args += ["--export-statistics"]
     if export:
         args += ["--export-3mf", "sliced.3mf"]
+    if bake_textures:
+        args += ["--bake-texture-displacement"]
     for k, v in (options or {}).items():
         if k in SLICE_FLAGS:
             if v:

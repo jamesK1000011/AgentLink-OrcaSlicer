@@ -105,7 +105,7 @@ In more detail:
 - **orca_paint**: paint supports, seam, fuzzy skin or colour on the triangles
   you choose by direction, box or height, or a texture: a raised or engraved
   pattern from a picture, set up as OrcaSlicer's Texture Displacement panel
-  sets it up (the relief is made when you press Bake in that panel).
+  sets it up; orca_slice bakes the relief into the part as it slices.
 - **orca_calibrate**: OrcaSlicer's calibration prints from its own test models
   (temperature, pressure advance, retraction, flow, max flow, VFA, input
   shaping, cornering).
