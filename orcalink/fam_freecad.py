@@ -84,10 +84,10 @@ def geo_for(session, base):
 
         @staticmethod
         def presets(label, work):
-            from addonkit import records as store
+            from agentlink import store  # the document's records (Agent Link's docs/records.md)
 
             from . import presets as SP
-            from addonkit.materials import DENSITY
+            from agentlink.materials import DENSITY
 
             setup = (store.setup_of(s.doc, label, "print") if label else None) or {}
             settings = {k: v for k, v in setup.items() if k not in ("id", "name", "type", "bodies")}

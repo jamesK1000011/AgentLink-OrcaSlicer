@@ -77,10 +77,6 @@ jobs:
           repository: jamesK1000011/AgentLink-FreeCAD
           path: agentlink-addon
       - uses: actions/checkout@v5
-        with:
-          repository: jamesK1000011/AddonKit-FreeCAD
-          path: addonkit-lib
-      - uses: actions/checkout@v5
         # Workshop Make: the loop reads a print back into its strength study
         # and slices beside OrcaSlicer's own tools.
         with:
@@ -110,7 +106,7 @@ jobs:
         timeout-minutes: 15
         run: |
           code=0
-          export FREECAD_LIB=$CONDA_PREFIX/lib ORCALINK_DIR="$GITHUB_WORKSPACE" PYTHONPATH="$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/agentlink-addon:$GITHUB_WORKSPACE/addonkit-lib:$GITHUB_WORKSPACE/workshop-addons/Common:$GITHUB_WORKSPACE/workshop-addons/Parts:$GITHUB_WORKSPACE/workshop-addons/Make"
+          export FREECAD_LIB=$CONDA_PREFIX/lib ORCALINK_DIR="$GITHUB_WORKSPACE" PYTHONPATH="$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/agentlink-addon:$GITHUB_WORKSPACE/workshop-addons/Common:$GITHUB_WORKSPACE/workshop-addons/Parts:$GITHUB_WORKSPACE/workshop-addons/Make"
           python -X faulthandler -m unittest discover -s tests -p test_freecad_bridge.py -v > "$RUNNER_TEMP/bridge.log" 2>&1 || code=$?
           tail -n 200 "$RUNNER_TEMP/bridge.log"
           echo "exit code: $code"
