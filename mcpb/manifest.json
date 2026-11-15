@@ -8,7 +8,22 @@
   "author": {
     "name": "jamesK1000011"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jamesK1000011/AgentLink-OrcaSlicer"
+  },
+  "homepage": "https://github.com/jamesK1000011/AgentLink-OrcaSlicer",
+  "documentation": "https://github.com/jamesK1000011/AgentLink-OrcaSlicer/blob/main/README.md",
+  "support": "https://github.com/jamesK1000011/AgentLink-OrcaSlicer/issues",
   "license": "LGPL-2.1-or-later",
+  "keywords": [
+    "OrcaSlicer",
+    "3D printing",
+    "slicer",
+    "G-code",
+    "3MF",
+    "MCP"
+  ],
   "server": {
     "type": "node",
     "entry_point": "server/index.js",

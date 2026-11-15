@@ -23,6 +23,8 @@ The first release, 0.1.0, is being prepared.
 - Release preparation: a beginner's README with a generated tool list, checks
   for the extension's manifest, licence headers checked for every file, and
   this changelog.
+- README: a privacy statement and how to uninstall; the extension's
+  manifest names its repository, documentation, support page and keywords.
 
 - Texture displacement: `orca_paint` kind `texture` writes the layer stack,
   images and per-triangle masks exactly as OrcaSlicer's Texture

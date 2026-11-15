@@ -130,6 +130,28 @@ Starting a print is always your call.
 Only `orcalink/agentlink_families.py` and `orcalink/fam_freecad.py` touch
 FreeCAD, and only Agent Link loads them.
 
+## Privacy
+
+Agent Link for OrcaSlicer has no telemetry. The server talks to the agent
+only over its own pipes and opens no network port. Your models, projects and
+G-code stay on your computer (`~/AgentLink` unless you choose another
+folder). The Claude Desktop extension goes online for one thing: with **Keep
+it up to date** on, it fetches this repository's newest files from GitHub at
+each start, asking as `orcaslicer-agentlink` and sending nothing about you or
+your files. Turn the setting off to stay offline. What the agent reads goes
+to the AI provider your MCP client uses, under that provider's terms.
+
+## Uninstall
+
+- **Claude Desktop extension**: Settings ▸ Extensions ▸ Agent Link for
+  OrcaSlicer ▸ Uninstall. Its downloaded copies are in
+  `~/.config/orcaslicer-agentlink` and its log in
+  `~/Library/Logs/OrcaSlicer Agent Link`; delete them too if you like.
+- **Installed by Agent Link for FreeCAD**: delete the `OrcaLink` folder from
+  FreeCAD's `Mod` folder.
+- **Another MCP client**: remove the `orcaslicer` entry from its config.
+- **Your files** in `~/AgentLink` are yours to keep or delete.
+
 ## For developers
 
 ```
