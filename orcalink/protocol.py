@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
+# OrcaLink's own copy of Agent Link for FreeCAD's agentlink/protocol.py, kept so OrcaLink runs as its own MCP server without Agent Link; 14 Nov 2026.
 # The Model Context Protocol, as much as a tool server needs: JSON-RPC 2.0,
 # one message a line (the stdio framing), initialize, tools/list,
 # tools/call and ping. No dependencies, so it runs in FreeCAD's own Python

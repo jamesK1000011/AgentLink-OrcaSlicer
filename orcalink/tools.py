@@ -21,6 +21,8 @@ from .protocol import Tool, ToolError
 GROUP = "orca"
 INFO = "OrcaSlicer headless: projects, every setting and part, paint, slice, export, G-code read back."
 
+# Filament densities (g/cm³): the values of Workshop Make's data/filaments.json, 14 Nov 2026;
+# kept here so OrcaLink stands alone.
 DENSITY = {"pla": 1.24, "petg": 1.27, "abs": 1.04, "asa": 1.07, "pa6-cf": 1.12, "tpu-95a": 1.21}
 
 
