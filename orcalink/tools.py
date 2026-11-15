@@ -3,7 +3,7 @@
 # slicer's window reaches (settings per project, filament, object, part,
 # layer range and plate; modifiers, negative parts, support blockers and
 # enforcers; instances, plates, per-layer G-code; painted supports, seam,
-# colour and fuzzy skin), sliced and exported by its command line, and the
+# colour, fuzzy skin and texture displacement), sliced and exported by its command line, and the
 # G-code read back layer by layer.
 #
 # Plain Python. A CAD program adds what only it has through geo (see Geo):
@@ -16,6 +16,7 @@ import os
 from . import cli as slicers
 from . import meshgen as MG
 from . import orca3mf as O
+from . import texdisp as TD
 from .protocol import Tool, ToolError
 
 GROUP = "orca"
@@ -815,6 +816,182 @@ def tools(out_dir=None, geo=None, guide=None):
         return {"project": dest, "objects": [{"index": o["index"], "name": o["name"], **({"body": g.label(bodies[n])} if names and n < len(bodies) else {})} for n, o in enumerate(objs)],
                 "next": "orca_project set/part_add/gcode change it; orca_paint paints it; orca_slice slices it."}
 
+    # ---- texture displacement (orca_paint kind texture) ---------------------------------------
+    def texture_image(t):
+        """(name, path, PNG bytes) of texture.image or texture.library."""
+        if t.get("image") and t.get("library"):
+            raise ToolError("invalid_input", "texture: image or library, not both.")
+        if t.get("library"):
+            from . import calibrate as C
+
+            cd = C.calib_dir(slicers.find("orcaslicer"))
+            lib = os.path.join(os.path.dirname(cd), "textures", "displacement") if cd else None
+            if not lib or not os.path.isdir(lib):
+                raise ToolError("unavailable", "texture.library: this OrcaSlicer ships no texture library (resources/textures/displacement); give image, a PNG.")
+            have = sorted(f[:-4] for f in os.listdir(lib) if f.lower().endswith(".png"))
+            name = next((n for n in have if n.lower() == str(t["library"]).lower()), None)
+            if name is None:
+                raise ToolError("invalid_input", f"texture.library {t['library']!r}: one of " + ", ".join(have) + ".")
+            path = os.path.join(lib, name + ".png")
+        else:
+            path = os.path.expanduser(str(t["image"]))
+            if not os.path.isabs(path):
+                path = os.path.join(s.out_dir, path)
+            if not os.path.isfile(path):
+                raise ToolError("not_found", f"texture.image {path}: no such file.")
+            name = os.path.splitext(os.path.basename(path))[0]
+        with open(path, "rb") as f:
+            data = f.read()
+        try:
+            TD.png_check(data)
+        except ValueError as e:
+            raise ToolError("invalid_input", f"texture.image {os.path.basename(path)}: {e}")
+        return name, path, data
+
+    def in_range(v, key, label):
+        lo, hi = TD.RANGES[key]
+        try:
+            x = float(v)
+        except (TypeError, ValueError):
+            raise ToolError("invalid_input", f"{label}: a number, {lo} to {hi}.")
+        if not lo <= x <= hi:
+            raise ToolError("invalid_input", f"{label}: {lo} to {hi} (the panel's range), not {v}.")
+        return int(x) if isinstance(lo, int) else x
+
+    def unit3(v, label):
+        if not (isinstance(v, list) and len(v) == 3 and all(isinstance(x, (int, float)) for x in v)):
+            raise ToolError("invalid_input", f"{label}: [x, y, z].")
+        n = sum(x * x for x in v) ** 0.5
+        if n < 1e-9:
+            raise ToolError("invalid_input", f"{label}: not zero.")
+        return [x / n for x in v]
+
+    def texture_paint(proj, o, p, a, chosen):
+        t = dict(a.get("texture") or {})
+        try:
+            layers, opts = proj.textures(o["index"], a.get("part"))
+        except O.ProjectError as e:
+            raise ToolError("invalid_input", str(e))
+        images = {}
+        slot = t.get("slot")
+        if slot is not None:
+            l = next((x for x in layers if x["slot"] == slot), None)
+            if l is None:
+                raise ToolError("invalid_input", f"texture.slot {slot}: no such layer. Layers: " + (", ".join(f"{x['slot']} {x['name']}" for x in layers) or "none") + ".")
+        else:
+            if t.get("remove"):
+                raise ToolError("invalid_input", "texture.remove: give the layer's slot.")
+            # The lowest free slot, as the panel's Add layer picks it (GLGizmoTextureDisplacement.cpp:4252-4262).
+            used = {x["slot"] for x in layers}
+            free = [n for n in range(TD.SLOTS) if n not in used]
+            if not free:
+                raise ToolError("invalid_input", f"Maximum number of texture displacement layers reached ({TD.SLOTS}): edit or remove one by slot.")
+            if not (t.get("image") or t.get("library")):
+                raise ToolError("invalid_input", "texture: image (a PNG) or library (a texture OrcaSlicer ships, like \"Knurl\") for a new layer.")
+            l = TD.layer(free[0])
+            layers.append(l)
+            slot = l["slot"]
+        masks = {}
+        if t.get("remove"):
+            layers = [x for x in layers if x["slot"] != slot]
+        else:
+            if t.get("image") or t.get("library"):
+                l["name"], l["path"], images[slot] = texture_image(t)
+            if t.get("name"):
+                l["name"] = str(t["name"])
+            for arg, key in (("depth", "depth_mm"), ("tileSize", "tiling_scale"), ("rotation", "rotation_deg"), ("midlevel", "midlevel"),
+                             ("smoothing", "smoothing"), ("seamAngle", "lscm_seam_angle_deg")):
+                if arg in t:
+                    l[key] = in_range(t[arg], key, f"texture.{arg}")
+            if "offset" in t:
+                v = t["offset"]
+                if not (isinstance(v, list) and len(v) == 2 and all(isinstance(x, (int, float)) for x in v)):
+                    raise ToolError("invalid_input", "texture.offset: [u, v] in mm.")
+                l["offset"] = [float(x) for x in v]
+            if "edgeFade" in t:
+                l["edge_smoothing"] = t["edgeFade"] is not False and t["edgeFade"] is not None
+                if l["edge_smoothing"] and t["edgeFade"] is not True:
+                    l["edge_smoothing_amount"] = in_range(t["edgeFade"], "edge_smoothing_amount", "texture.edgeFade")
+            for arg, key in (("invert", "invert"), ("colors", "color_enabled"), ("repeat", "tile_enabled")):
+                if arg in t:
+                    l[key] = bool(t[arg])
+            if "mirror" in t:
+                l["tile_method"] = TD.TILES["mirrored" if t["mirror"] else "repeat"]
+            if "projection" in t:
+                pr = str(t["projection"]).lower()
+                if pr not in TD.PROJECTIONS or pr == "model_uv":
+                    raise ToolError("invalid_input", "texture.projection: triplanar, cylindrical, spherical, lscm or view (model_uv needs the model's own UV map, which a project does not carry).")
+                l["projection_method"] = TD.PROJECTIONS[pr]
+            if l["projection_method"] == TD.PROJECTIONS["view"] and ("view" in t or "projection" in t):
+                v = t.get("view") or {}
+                if not (v.get("right") and v.get("up")):
+                    raise ToolError("invalid_input", "texture.view { right [x, y, z], up [x, y, z] }: the projector's axes in the part's coordinates (Project from view).")
+                r, u = unit3(v["right"], "texture.view.right"), unit3(v["up"], "texture.view.up")
+                if abs(sum(r[i] * u[i] for i in range(3))) > 0.999:
+                    raise ToolError("invalid_input", "texture.view: right and up must not be parallel.")
+                l["view_project_right"], l["view_project_up"] = r, u
+            if "blend" in t:
+                b = str(t["blend"]).lower()
+                if b not in TD.BLENDS:
+                    raise ToolError("invalid_input", "texture.blend: " + ", ".join(TD.BLENDS) + ".")
+                l["blend_mode"] = TD.BLENDS[b]
+            if chosen is not None:
+                # As the other kinds: painting adds to the layer's paint; replace or clear starts it afresh.
+                _, tris, attrs = proj.mesh(p)
+                old = attrs.get(TD.attr(slot)) or [""] * len(tris)
+                keep = not (a.get("replace") or a.get("clear"))
+                masks[slot] = [bool(on) or (keep and bool(old[n])) for n, on in enumerate(chosen)]
+            opts["active_slot"] = slot  # the panel opens on the layer last worked on (hpp:460-463)
+        to = a.get("textureOptions") or {}
+        if "displaceBorder" in to:
+            opts["displace_border"] = bool(to["displaceBorder"])
+        if "smooth" in to:
+            sm = to["smooth"]
+            opts["smooth_enabled"] = bool(sm)
+            if isinstance(sm, dict):
+                if "strength" in sm:
+                    opts["smooth_strength"] = in_range(sm["strength"], "smooth_strength", "textureOptions.smooth.strength")
+                if "passes" in sm:
+                    opts["smooth_iterations"] = in_range(sm["passes"], "smooth_iterations", "textureOptions.smooth.passes")
+                if "skipBorder" in sm:
+                    opts["smooth_skip_border"] = bool(sm["skipBorder"])
+        if "pipeline" in to:
+            if to["pipeline"] not in ("v2", "classic"):
+                raise ToolError("invalid_input", "textureOptions.pipeline: v2 (refine and simplify) or classic (keeps the mesh's triangles; colour needs it).")
+            opts["pipeline_v2"] = to["pipeline"] == "v2"
+        if "refine" in to:
+            if not isinstance(to["refine"], (int, float)) or to["refine"] < 0:
+                raise ToolError("invalid_input", "textureOptions.refine: edge length in mm, 0 automatic.")
+            opts["v2_refine_mm"] = float(to["refine"])
+        if "maxTriangles" in to:
+            if not isinstance(to["maxTriangles"], int) or to["maxTriangles"] < -1:
+                raise ToolError("invalid_input", "textureOptions.maxTriangles: thousands of triangles, -1 automatic, 0 no simplifying.")
+            opts["v2_max_triangles_k"] = to["maxTriangles"]
+        for arg, key in (("relocate", "v2_relocate"), ("regularize", "v2_regularize"), ("colorMix", "color_mix_enabled")):
+            if arg in to:
+                opts[key] = bool(to[arg])
+        if "mixCount" in to:
+            opts["color_mix_count"] = in_range(to["mixCount"], "color_mix_count", "textureOptions.mixCount")
+        if "denoise" in to:
+            opts["color_despeckle"] = in_range(to["denoise"], "color_despeckle", "textureOptions.denoise")
+        try:
+            proj.set_textures(o["index"], a.get("part"), layers, opts, images, masks)
+        except O.ProjectError as e:
+            raise ToolError("invalid_input", str(e))
+        proj.save()
+        out = {"project": proj.path, "object": o["name"], "kind": "texture", "slot": slot}
+        if t.get("remove"):
+            out["removed"] = True
+        else:
+            out["layer"] = O.texture_summary(next(x for x in proj.textures(o["index"], a.get("part"))[0] if x["slot"] == slot))
+            _, _, attrs = proj.mesh(p)
+            out["triangles"] = sum(1 for x in attrs.get(TD.attr(slot)) or [] if x)
+            if not out["triangles"]:
+                out["warning"] = "No triangle carries this layer yet: paint it with where (or faces)."
+        out["note"] = ("Saved as OrcaSlicer's Texture Displacement panel saves it. The relief is made when the panel's Bake runs in the "
+                       "window; until then orca_slice slices the part without it.")
+        return out
+
     # ---- orca_paint -------------------------------------------------------------------------
     def orca_paint(a):
         proj = load(a)
@@ -828,11 +1005,17 @@ def tools(out_dir=None, geo=None, guide=None):
         where = a.get("where")
         if faces and where:
             raise ToolError("invalid_input", "faces or where, not both.")
-        if not (faces or where or a.get("clear")):
+        tex = kind == "texture"
+        if tex and not (a.get("texture") or a.get("textureOptions") or faces or where or a.get("clear")):
+            raise ToolError("invalid_input", "texture { image | library, depth, tileSize, … } and where (or faces) to paint it on.")
+        elif not tex and not (faces or where or a.get("clear")):
             raise ToolError("invalid_input", "where { normal, within, box, below, above } (or faces, with a CAD body), or clear.")
         state = a.get("state", {"supports": "enforce", "seam": "enforce", "fuzzy_skin": "fuzzy", "color": 2}.get(kind))
         verts, tris, attrs = proj.mesh(p)
-        if a.get("clear"):
+        chosen = None  # texture settings only: the layer's paint stays
+        if tex and not (faces or where or a.get("clear")):
+            pass
+        elif a.get("clear"):
             chosen = [False] * len(tris)
             state = None
         elif where:
@@ -855,6 +1038,8 @@ def tools(out_dir=None, geo=None, guide=None):
                 pts3 = [tb(verts[x]) for x in (i, j, k)]
                 centres.append(tuple(sum(q[m] for q in pts3) / 3 for m in range(3)))
             chosen = [fi in want for fi in g.face_of(body, centres)]
+        if tex:
+            return texture_paint(proj, o, p, a, chosen if (faces or where or a.get("clear")) else None)
         old = attrs.get(O.PAINT[kind][0]) or [""] * len(tris)
         names = O.PAINT[kind][1]
         states, hit = [], 0
@@ -1102,9 +1287,14 @@ def tools(out_dir=None, geo=None, guide=None):
         ),
         Tool(
             "orca_paint",
-            "Paint an OrcaSlicer project's object, as the window's paint tools do: kind supports (state enforce|block), seam (enforce|block), fuzzy_skin (fuzzy), color (a filament slot 1..). Which triangles: where { normal [x, y, z], within (degrees, default 20), box [[x0, y0, z0], [x1, y1, z1]], below z, above z } in object coordinates, or faces [\"Face3\", …] of the CAD body it was made from (body; found by name otherwise). { path, object, part, state, replace (unpainted triangles cleared), clear }.",
+            "Paint an OrcaSlicer project's object, as the window's paint tools do: kind supports (state enforce|block), seam (enforce|block), fuzzy_skin (fuzzy), color (a filament slot 1..), "
+            "texture (a raised or engraved surface pattern from a picture, as the Texture Displacement panel makes: texture { image (a PNG; light is raised) or library (a texture OrcaSlicer ships, like \"Knurl\"), "
+            "depth mm 0.01-10, tileSize mm 0.2-200, rotation 0-360, offset [u, v], invert, midlevel 0-10, smoothing 0-1, edgeFade 0.02-1|false, repeat, mirror, projection triplanar|cylindrical|spherical|lscm|view (view { right, up }), "
+            "seamAngle 5-90, blend add|subtract|multiply|divide|override, colors, name; slot edits or (remove) removes a layer, up to 8 }, textureOptions { displaceBorder, smooth false|{ strength, passes, skipBorder }, pipeline v2|classic, refine, maxTriangles, relocate, regularize, colorMix, mixCount, denoise }; "
+            "the relief itself is made by the panel's Bake in the window). Which triangles: where { normal [x, y, z], within (degrees, default 20), box [[x0, y0, z0], [x1, y1, z1]], below z, above z } in object coordinates, or faces [\"Face3\", …] of the CAD body it was made from (body; found by name otherwise). { path, object, part, state, replace (unpainted triangles cleared), clear }.",
             obj({"path": {"type": "string"}, "object": {"type": ["string", "integer"]}, "part": {"type": ["string", "integer"]}, "body": {"type": "string"},
-                 "kind": {"type": "string", "enum": list(O.PAINT)}, "faces": {"type": "array", "items": {"type": "string"}}, "where": WHERE, "state": {}, "replace": {"type": "boolean"}, "clear": {"type": "boolean"}},
+                 "kind": {"type": "string", "enum": list(O.PAINT) + ["texture"]}, "faces": {"type": "array", "items": {"type": "string"}}, "where": WHERE, "state": {}, "replace": {"type": "boolean"}, "clear": {"type": "boolean"},
+                 "texture": {"type": "object"}, "textureOptions": {"type": "object"}},
                 ["path", "object"]),
             orca_paint,
         ),

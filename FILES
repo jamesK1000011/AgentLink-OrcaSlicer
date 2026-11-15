@@ -24,9 +24,11 @@ orcalink/printstrength.py
 orcalink/protocol.py
 orcalink/prusa.py
 orcalink/server.py
+orcalink/texdisp.py
 orcalink/tools.py
 orcalink_server.py
 tests/data/orca-two-boxes.json
+tests/data/texture-displacement-golden.json
 tests/test_calibrate.py
 tests/test_draco.py
 tests/test_files.py
@@ -39,5 +41,6 @@ tests/test_printstrength.py
 tests/test_prusa.py
 tests/test_redteam.py
 tests/test_release.py
+tests/test_texdisp.py
 tests/test_tools.py
 tools/gen_readme_tools.py

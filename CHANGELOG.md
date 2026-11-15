@@ -24,6 +24,11 @@ The first release, 0.1.0, is being prepared.
   for the extension's manifest, licence headers checked for every file, and
   this changelog.
 
+- Texture displacement: `orca_paint` kind `texture` writes the layer stack,
+  images and per-triangle masks exactly as OrcaSlicer's Texture
+  Displacement panel saves them, checked byte for byte against the panel's
+  own serialiser. The relief itself is still made by the panel's Bake.
+
 ### Changed
 
 - The bridge reads records and filament densities from Agent Link, now that

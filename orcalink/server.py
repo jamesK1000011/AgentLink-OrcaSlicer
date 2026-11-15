@@ -13,7 +13,7 @@ GUIDES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "guides")
 
 INSTRUCTIONS = (
     "OrcaSlicer, headless: orca_project reads and changes a project (.3mf) at every level the window reaches; orca_paint paints supports, seam, "
-    "fuzzy skin and colour; orca_calibrate builds OrcaSlicer's calibration prints; orca_slice slices or exports by its command line; gcode_read "
+    "fuzzy skin, colour and texture displacement; orca_calibrate builds OrcaSlicer's calibration prints; orca_slice slices or exports by its command line; gcode_read "
     "reads the G-code back layer by layer. Relative paths go in the output folder (orca_status). guide_read { topic: \"orca\" } has each action's arguments. "
     "Starting a print is the person's call."
 )

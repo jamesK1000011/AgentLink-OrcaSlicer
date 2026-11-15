@@ -103,7 +103,9 @@ In more detail:
   presets, arrange and orient, and mesh tools (cut, split, merge, mirror, fix,
   smooth).
 - **orca_paint**: paint supports, seam, fuzzy skin or colour on the triangles
-  you choose by direction, box or height.
+  you choose by direction, box or height, or a texture: a raised or engraved
+  pattern from a picture, set up as OrcaSlicer's Texture Displacement panel
+  sets it up (the relief is made when you press Bake in that panel).
 - **orca_calibrate**: OrcaSlicer's calibration prints from its own test models
   (temperature, pressure advance, retraction, flow, max flow, VFA, input
   shaping, cornering).

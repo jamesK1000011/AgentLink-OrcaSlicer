@@ -20,6 +20,8 @@ import re
 import xml.etree.ElementTree as ET
 import zipfile
 
+from . import texdisp as TD
+
 CORE = "http://schemas.microsoft.com/3dmanufacturing/core/2015/02"
 PROD = "http://schemas.microsoft.com/3dmanufacturing/production/2015/06"
 BBS = "http://schemas.bambulab.com/package/2021"
@@ -43,7 +45,7 @@ PAINT = {"supports": ("paint_supports", {"none": 0, "enforce": 1, "block": 2}),
          "color": ("paint_color", None)}
 # Metadata a part or object carries that is bookkeeping, not a setting.
 BOOK = {"name", "matrix", "source_file", "source_object_id", "source_volume_id", "source_offset_x", "source_offset_y", "source_offset_z",
-        "mesh_stat", "extruder", "mesh_shared", "volume_type", "source_in_inches", "source_in_meters"}
+        "mesh_stat", "extruder", "mesh_shared", "volume_type", "source_in_inches", "source_in_meters", "texture_displacement"}
 PLATE_KEYS = {"name": "plater_name", "locked": "locked", "bed_type": "curr_bed_type", "print_sequence": "print_sequence",
               "first_layer_print_sequence": "first_layer_print_sequence", "other_layers_print_sequence": "other_layers_print_sequence",
               "spiral_mode": "spiral_mode", "filament_map_mode": "filament_map_mode", "filament_maps": "filament_maps"}
@@ -388,6 +390,30 @@ def paint_value(s):
     return None
 
 
+def texture_summary(l):
+    """A texture displacement layer as orca_paint takes it back."""
+    names = lambda d, v: next((k for k, x in d.items() if x == v), v)
+    out = {"slot": l["slot"], "name": l["name"], "depth": round(l["depth_mm"], 4), "tileSize": round(l["tiling_scale"], 4),
+           "rotation": round(l["rotation_deg"], 3), "projection": names(TD.PROJECTIONS, l["projection_method"]),
+           "blend": names(TD.BLENDS, l["blend_mode"]), "image": bool(l["path_in_3mf"])}
+    if l["offset"] != [0.0, 0.0]:
+        out["offset"] = [round(x, 4) for x in l["offset"]]
+    for k, n in (("invert", "invert"), ("color_enabled", "colors")):
+        if l[k]:
+            out[n] = True
+    if l["midlevel"]:
+        out["midlevel"] = round(l["midlevel"], 4)
+    if l["smoothing"]:
+        out["smoothing"] = round(l["smoothing"], 4)
+    if l["edge_smoothing"]:
+        out["edgeFade"] = round(l["edge_smoothing_amount"], 4)
+    if not l["tile_enabled"]:
+        out["repeat"] = False
+    elif l["tile_method"] == 1:
+        out["mirror"] = True
+    return out
+
+
 # ---- the project ---------------------------------------------------------------------------
 
 def _meta(el):
@@ -582,6 +608,12 @@ class Project:
                 painted = sorted(k[6:] for k in (m[2] if m else {}) if any(m[2][k]))
                 if painted:
                     p["painted"] = painted
+                try:
+                    tex = self.textures(o["index"], o["parts"].index(p) + 1)[0]
+                except ProjectError:
+                    tex = []
+                if tex:
+                    p["textures"] = [texture_summary(l) for l in tex]
                 p.pop("transform", None)
                 p.pop("file", None)
                 if not p["settings"]:
@@ -802,6 +834,80 @@ class Project:
         self._meshes.pop((p["file"], p["id"]), None)
         self._dirty()
         return sum(1 for c in codes if c)
+
+    # -- texture displacement (the Texture Displacement gizmo's layer stack; see texdisp.py) ---
+    def _settings_part(self, o, p):
+        for x in self._so(o).findall("part"):
+            if x.get("id") == p["id"]:
+                return x
+        raise ProjectError(f"{p['name']}: no part entry in the project's settings (not written by OrcaSlicer).")
+
+    def textures(self, which, part=None):
+        """(layers, options) of a part's texture displacement stack; ([], the
+        defaults) when it has none."""
+        o = self.object(which)
+        p = self.part(o, part)
+        path = _meta(self._settings_part(o, p)).get(TD.KEY)
+        if not path:
+            return [], TD.options()
+        if path not in self.files:
+            raise ProjectError(f"{p['name']}: its texture displacement data ({path}) is missing from the project.")
+        try:
+            return TD.from_json(self.files[path].decode("utf-8"))
+        except (TD.Malformed, UnicodeDecodeError) as e:
+            raise ProjectError(f"{p['name']}: malformed texture displacement data ({e}).")
+
+    def set_textures(self, which, part, layers, opts, images=None, masks=None):
+        """Write a part's stack as the gizmo saves it: images {slot: PNG bytes}
+        (kept from the project when not given), masks {slot: [bool] per
+        triangle} (None keeps a slot's paint). A slot no layer holds loses its
+        paint and image; an empty stack removes the lot."""
+        o = self.object(which)
+        p = self.part(o, part)
+        sp = self._settings_part(o, p)
+        images = images or {}
+        masks = masks or {}
+        verts, tris, attrs = self.mesh(p)
+        attrs = dict(attrs)
+        slots = {l["slot"] for l in layers}
+        for s in range(TD.SLOTS):
+            a = TD.attr(s)
+            if s not in slots:
+                attrs.pop(a, None)
+            elif s in masks:
+                if len(masks[s]) != len(tris):
+                    raise ProjectError(f"{len(masks[s])} paint states for {len(tris)} triangles.")
+                attrs[a] = [TD.PAINTED if on else "" for on in masks[s]]
+        f = p["file"].lstrip("/")
+        new = mesh_xml(verts, tris, p["id"], {k: v for k, v in attrs.items() if any(v)}).encode()
+        pat = re.compile(rb'\s*<object[^>]*\sid="' + p["id"].encode() + rb'"[^>]*>.*?</object>\s*\n?', re.S)
+        self.files[f] = pat.sub(lambda m: b"\n" + new, self.files[f], count=1)
+        self._meshes.pop((p["file"], p["id"]), None)
+        # Names as add_texture_displacement() gives them (bbs_3mf.cpp:8289, 8297): <id>_<slot>.png, <id>.json.
+        base = TD.DIR + p["id"]
+        for n in list(self.files):
+            m = re.fullmatch(re.escape(base) + r"_(\d+)\.png", n)
+            if m and int(m.group(1)) not in slots:
+                del self.files[n]
+        if not layers:
+            self.files.pop(base + ".json", None)
+            _set_meta(sp, TD.KEY, None)
+            self._dirty()
+            return
+        out = []
+        for l in layers:  # in the stack's own order, as the volume holds it
+            l = dict(l)
+            img = base + f"_{l['slot']}.png"
+            if l["slot"] in images:
+                self.files[img] = images[l["slot"]]
+            elif l.get("path_in_3mf") and l["path_in_3mf"] != img and l["path_in_3mf"] in self.files:
+                self.files[img] = self.files.pop(l["path_in_3mf"])
+            # The exporter clears path_in_3mf for a layer with no image (bbs_3mf.cpp:8285-8293).
+            l["path_in_3mf"] = img if img in self.files else ""
+            out.append(l)
+        self.files[base + ".json"] = TD.to_json(out, opts).encode("utf-8")
+        _set_meta(sp, TD.KEY, base + ".json")
+        self._dirty()
 
     def place(self, which, instance=0, move=None, rotate=None, scale=None, at=None, drop=True):
         """An instance moved, rotated or scaled (about its own origin), or put
@@ -1847,7 +1953,8 @@ class Project:
             order = ["[Content_Types].xml", "_rels/.rels"]
             for n in order + sorted(x for x in self.files if x not in order):
                 if n in self.files:
-                    z.writestr(n, self.files[n])
+                    # A texture image goes in stored, as Orca writes it (MZ_NO_COMPRESSION, bbs_3mf.cpp:8291).
+                    z.writestr(n, self.files[n], zipfile.ZIP_STORED if n.startswith(TD.DIR) and n.endswith(".png") else zipfile.ZIP_DEFLATED)
         os.replace(tmp, path)
         self.path = path
         self.changed = False
