@@ -1,3 +1,4 @@
+CHANGELOG.md
 LICENSE
 README.md
 REUSE.toml
@@ -37,4 +38,6 @@ tests/test_presets.py
 tests/test_printstrength.py
 tests/test_prusa.py
 tests/test_redteam.py
+tests/test_release.py
 tests/test_tools.py
+tools/gen_readme_tools.py
