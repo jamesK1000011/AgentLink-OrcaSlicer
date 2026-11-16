@@ -6,7 +6,9 @@ All notable changes to Agent Link for OrcaSlicer. The format follows
 
 ## [Unreleased]
 
-The first release, 0.1.0, is being prepared.
+## [0.1.0] - 2026-11-16
+
+The first release.
 
 ### Added
 
