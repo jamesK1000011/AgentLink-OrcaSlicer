@@ -91,6 +91,34 @@ class Presets(unittest.TestCase):
         with open(SP.write_profiles(b, os.path.join(self.tmp, "w2"))["machine"]) as f:
             self.assertEqual(json.load(f)["nozzle_volume_type"], ["Standard", "Standard"])
 
+    def test_user_filament_on_two_nozzles(self):
+        """A user filament preset as OrcaSlicer saves one for an H2D: only
+        what differs, one value where the system preset has one per extruder
+        variant, and lists left empty. The command line stopped on those
+        ("ConfigOptionVector::set_at(): Assigning from an empty vector")."""
+        sysroot = os.path.join(self.tmp, "system")
+        put(sysroot, "BBL/filament/Generic PETG @BBL H2D.json", {
+            "type": "filament", "name": "Generic PETG @BBL H2D", "filament_type": ["PETG"],
+            "filament_extruder_variant": ["Direct Drive Standard", "Direct Drive High Flow"],
+            "nozzle_temperature": ["250", "255"], "filament_max_volumetric_speed": ["12", "20"],
+            "cool_plate_temp": ["0"], "textured_plate_temp": ["70"], "filament_vendor": ["Generic"]})
+        put(os.path.join(self.tmp, "user"), "1234/filament/Brand PETG @ H2D.json", {
+            "name": "Brand PETG @ H2D", "inherits": "Generic PETG @BBL H2D", "from": "User",
+            "nozzle_temperature": ["240"], "filament_vendor": [], "filament_ids": [], "compatible_printers": [],
+            "filament_max_volumetric_speed": ["14", "22"]})
+        b = SP.bundle("bambustudio", "Bambu Lab H2D 0.4 nozzle", "My fine PLA", "Brand PETG @ H2D")
+        f = b["filament"]
+        self.assertEqual(f["nozzle_temperature"], ["240", "240"])          # the person's, for both variants
+        self.assertEqual(f["filament_max_volumetric_speed"], ["14", "22"])
+        self.assertEqual(f["filament_vendor"], ["Generic"])                # empty: the parent's kept
+        self.assertEqual(f["cool_plate_temp"], ["0"])
+        with open(SP.write_profiles(b, os.path.join(self.tmp, "w3"))["filament"]) as fh:
+            written = json.load(fh)
+        empty = [k for k, v in written.items() if isinstance(v, list) and not v]
+        self.assertEqual(empty, [])
+        self.assertNotIn("filament_ids", written)
+        self.assertEqual(written["type"], "filament")
+
     def test_export_import_round_trip(self):
         b = SP.bundle("bambustudio", "Bambu Lab H2D 0.4 nozzle", "My fine PLA", "Bambu PLA Basic @BBL H2D", "H2D fine")
         name, path = SP.save(self.out, b)

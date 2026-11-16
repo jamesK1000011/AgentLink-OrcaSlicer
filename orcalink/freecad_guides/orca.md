@@ -16,7 +16,7 @@ These tools are Agent Link for OrcaSlicer's (a separate add-on, github.com/james
 - Mesh: mesh { op simplify|fix|smooth|subdivide|mirror|boolean (with, mode)|cut (axis, at, keep)|cut_grid (size)|split|split_objects|merge (objects)|decompose_color }.
 - Layers: layer_heights { profile [[z, h]…] | adaptive 0..1 }, gcode { z, kind pause|color_change|tool_change|template|custom, gcode, extruder, plate, remove }, brim_ears { points, radius }.
 - Filaments and presets: filament { slot | like, color, type, settings | remove }, flush { matrix, multiplier }, presets { machine, process, filament | bundle }.
-- Plates: plate { object, plate } (moves it; the next number makes a plate), plate_add, plate_remove, plate_duplicate, plate_move { plate, to }, set { scope: plate, key: name|locked|bed_type|print_sequence … }.
+- Plates: plate { object, plate } (moves it; the next number makes a plate), plate_add, plate_remove, plate_duplicate, plate_move { plate, to }, set { scope: plate, key: name|locked|bed_type|print_sequence … } (bed_type is written as the plate's own and as the project's curr_bed_type, read back, and an error if it did not take). A new project's bed type is chosen so every filament goes on it (bedType, bedTypes in the answer); a slice stopped by "<plate> does not support filament <n>" names the bed types that would work.
 - OrcaSlicer's own: arrange, orient (options allow_rotations, align_to_y_axis …), cli { options } (uptodate, repair, clone_objects, repetitions, scale, rotate, ground_face_normal …).
 - info { object } (with its effective print settings), saveAs writes a copy.
 

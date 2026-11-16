@@ -12,6 +12,7 @@
 # loop between the two: design, slice, read the print back, revise, re-slice.
 
 import os
+import re
 
 from . import cli as slicers
 from . import meshgen as MG
@@ -274,7 +275,25 @@ def tools(out_dir=None, geo=None, guide=None):
             dest = safe_dest(path_of({"path": a["saveAs"]}, must=False), ".3mf", a) if a.get("saveAs") else proj.path
             proj.save(dest)
             out = {**out, "saved": dest, "next": "orca_slice { path } slices it as it now stands."}
+            if action == "set":
+                readback(dest, a, out)
         return out
+
+    def readback(dest, a, out):
+        """A bed type set is read back from the saved file, as OrcaSlicer
+        will read it; a value that did not take is an error, not a success."""
+        pairs = dict(a.get("settings") or {})
+        if a.get("key"):
+            pairs[a["key"]] = a.get("value")
+        scope = out.get("scope")
+        want = pairs.get("bed_type") if scope == "plate" else pairs.get("curr_bed_type") if scope == "project" else None
+        if want in (None, ""):
+            return
+        plate = int(a.get("plate", 1)) if scope == "plate" else None
+        got = O.Project(dest).bed_type(plate)
+        if got != want:
+            raise ToolError("failed", f"bed type {want!r} was written but {os.path.basename(dest)} reads back {got!r}: it did not take. Nothing else in this call is affected; say so to the person.")
+        out["bedType"] = {"plate": plate, "readBack": got} if plate else {"project": got}
 
     def act(proj, action, a):
         if action == "info":
@@ -316,8 +335,8 @@ def tools(out_dir=None, geo=None, guide=None):
                     proj.set_part(a["object"], a.get("part"), k, v)
                     done[k] = v
                 elif scope == "plate":
-                    proj.set_plate(int(a.get("plate", 1)), k, v)
-                    done[k] = v
+                    r = proj.set_plate(int(a.get("plate", 1)), k, v)
+                    done[k] = r if k == "bed_type" else v
             if scope == "range":
                 if a.get("zmin") is None or a.get("zmax") is None:
                     raise ToolError("invalid_input", "range: object, zmin and zmax (mm from the bed) and settings ({} removes it).")
@@ -813,7 +832,21 @@ def tools(out_dir=None, geo=None, guide=None):
             raise ToolError("failed", str(e))
         proj = O.Project(dest)
         objs = proj.objects()
+        # The command line leaves every new project on Cool Plate, which PETG,
+        # ABS and most others do not go on: a bed type the filaments take is
+        # chosen (bed_type when given and they take it, else the printer's
+        # default_bed_type, else Textured PEI first).
+        bed, fits = proj.pick_bed_type(a.get("bed_type"))
+        bed_note = {}
+        if a.get("bed_type") and a["bed_type"] != bed:
+            bed_note["bedTypeRefused"] = f"{a['bed_type']}: the filaments here do not go on it (bed temperature 0)"
+        if bed and proj.config.get("curr_bed_type") != bed:
+            proj.config["curr_bed_type"] = bed
+            proj.changed = True
+            proj.save()
         return {"project": dest, "objects": [{"index": o["index"], "name": o["name"], **({"body": g.label(bodies[n])} if names and n < len(bodies) else {})} for n, o in enumerate(objs)],
+                "bedType": proj.bed_type(), "bedTypes": fits, **bed_note,
+                "bedTypeNote": "Chosen from the filaments' bed temperatures; if the plate on the printer is another of bedTypes, orca_project set { key: curr_bed_type, value } changes it.",
                 "next": "orca_project set/part_add/gcode change it; orca_paint paints it; orca_slice slices it."}
 
     # ---- texture displacement (orca_paint kind texture) ---------------------------------------
@@ -1220,7 +1253,24 @@ def tools(out_dir=None, geo=None, guide=None):
         except FileNotFoundError as e:
             raise ToolError("unavailable", str(e))
         except (RuntimeError, ValueError) as e:
-            raise ToolError("failed", str(e))
+            raise ToolError("failed", str(e) + bed_hint(p, a, str(e)))
+
+    def bed_hint(p, a, msg):
+        """When OrcaSlicer stops on a bed type a filament does not go on
+        ("Cool Plate does not support filament 1"), which bed types would."""
+        if not re.search(r"does not support filament|not support.*filament|bed.*filament", msg, re.I):
+            return ""
+        try:
+            pr = O.Project(p)
+            plate = int(a.get("plate", 0)) or None
+            fits = pr.bed_types_for(pr.used_filaments(plate))
+            now = pr.bed_type(plate)
+        except Exception:
+            return ""
+        if not fits:
+            return " — No bed type takes every filament here (each has a bed temperature of 0 on one of them): change a filament, or set its *_plate_temp."
+        return (f" — The bed type is {now}; the filaments here go on: {', '.join(fits)}. "
+                f"orca_project set {{ key: curr_bed_type, value: \"{fits[0]}\" }} (or scope plate, key bed_type, for one plate), then slice again.")
 
     # ---- gcode_read -------------------------------------------------------------------------
     def gcode_read(a):
@@ -1276,7 +1326,7 @@ def tools(out_dir=None, geo=None, guide=None):
     return [
         Tool(
             "orca_project",
-            "OrcaSlicer projects (.3mf), headless — everything the window keeps. action new { files (STL, OBJ, 3MF, STEP …) | bodies, path, bundle | machine, process, filament } | info { path, object } | set { path, scope project|object|part|range|plate, key, value | settings, object, part, slot, zmin, zmax, plate } | part_add { object, kind, file | box | primitive | body } | part_remove | replace { object, file | body } (the model changed: its mesh follows, settings stay) | object_add | object_remove | copy | instance | instance_to_object | printable | place | lay_flat | emboss | scale_to_fit | fill_bed | grid | mesh { op } | layer_heights | gcode { z, kind } | brim_ears | filament | flush | presets | plate | plate_add | plate_remove | plate_duplicate | plate_move | arrange | orient | cli | strength { object } | settings { query } (every setting's key, type, limits, values). Values checked before saving; saveAs writes a copy. guide_read { topic: \"orca\" } has each action's arguments.",
+            "OrcaSlicer projects (.3mf), headless — everything the window keeps. action new { files (STL, OBJ, 3MF, STEP …) | bodies, path, bundle | machine, process, filament (the person's own presets too: their inheritance resolved, empty lists dropped), bed_type } (the bed type is chosen so every filament goes on it — bed_type if they do, else the printer's default, else Textured PEI first; the answer lists bedTypes that would work) | info { path, object } | set { path, scope project|object|part|range|plate, key, value | settings, object, part, slot, zmin, zmax, plate } (scope plate key bed_type writes the plate's own bed type and the project's curr_bed_type, other plates keeping theirs, and is read back from the saved file: an error if it did not take) | part_add { object, kind, file | box | primitive | body } | part_remove | replace { object, file | body } (the model changed: its mesh follows, settings stay) | object_add | object_remove | copy | instance | instance_to_object | printable | place | lay_flat | emboss | scale_to_fit | fill_bed | grid | mesh { op } | layer_heights | gcode { z, kind } | brim_ears | filament | flush | presets | plate | plate_add | plate_remove | plate_duplicate | plate_move | arrange | orient | cli | strength { object } | settings { query } (every setting's key, type, limits, values). Values checked before saving; saveAs writes a copy. guide_read { topic: \"orca\" } has each action's arguments.",
             obj({"action": {"type": "string", "enum": ACTIONS},
                  "path": {"type": "string"}, "saveAs": {"type": "string"}, "body": {"type": "string"}, "bodies": {"type": "array", "items": {"type": "string"}}, "of": {"type": "string"},
                  "object": {"type": ["string", "integer"]}, "part": {"type": ["string", "integer"]}, "scope": {"type": "string", "enum": ["project", "object", "part", "range", "plate"]},
@@ -1291,7 +1341,7 @@ def tools(out_dir=None, geo=None, guide=None):
                  "tolerance": {"type": "number"}, "iterations": {"type": "integer"}, "axis": {"type": "string"}, "keep": {"type": "string"}, "objects": {"type": "array", "items": {"type": ["string", "integer"]}}, "options": {"type": "object"},
                  "file": {"type": "string"}, "handy": {"type": "string"}, "to": {"type": "integer"}, "margin": {"type": "number"}, "spacing": {"type": "number"},
                  "nx": {"type": "integer"}, "ny": {"type": "integer"}, "bundle": {"type": "string"}, "machine": {"type": "string"}, "process": {"type": "string"},
-                 "filament": {"type": "string"}, "force": {"type": "boolean"}, "overwrite": {"type": "boolean"}, "face": {"type": "string"}, "normal": VEC, "text": {"type": "string"}, "svg": {"type": "string"}, "depth": {"type": "number"}, "font": {"type": "string"}}),
+                 "filament": {"type": "string"}, "bed_type": {"type": "string", "enum": list(O.BED_TEMPS)}, "force": {"type": "boolean"}, "overwrite": {"type": "boolean"}, "face": {"type": "string"}, "normal": VEC, "text": {"type": "string"}, "svg": {"type": "string"}, "depth": {"type": "number"}, "font": {"type": "string"}}),
             orca_project,
             changes=False,
         ),
@@ -1317,7 +1367,7 @@ def tools(out_dir=None, geo=None, guide=None):
         ),
         Tool(
             "orca_slice",
-            "Slice an OrcaSlicer project as it stands, by its command line (headless): { path, plate (0 all), keep (the sliced .3mf, default true) } gives time, filament, warnings and statistics; export stl|stls|obj|amf|drc|drcs|svg (solid slices, a layer a group)|settings|slicedata|3mf writes those instead, inspect_mesh|inspect_paint|info gives Orca's own report; options (timelapse, skip_objects \"3,5\", allow_mix_temp, allow_multicolor_oneplate, no_check, mtcpp, mstpp) go to the slice; texture displacement painted with orca_paint is baked into the parts first.",
+            "Slice an OrcaSlicer project as it stands, by its command line (headless): { path, plate (0 all), keep (the sliced .3mf, default true) } gives time, filament, warnings and statistics; export stl|stls|obj|amf|drc|drcs|svg (solid slices, a layer a group)|settings|slicedata|3mf writes those instead, inspect_mesh|inspect_paint|info gives Orca's own report; options (timelapse, skip_objects \"3,5\", allow_mix_temp, allow_multicolor_oneplate, no_check, mtcpp, mstpp) go to the slice; texture displacement painted with orca_paint is baked into the parts first. A slice stopped by a bed type a filament does not go on (\"Cool Plate does not support filament 1\") says which bed types would.",
             obj({"path": {"type": "string"}, "plate": {"type": "integer"}, "keep": {"type": "boolean"}, "export": {"type": "string", "enum": ["gcode", "stl", "stls", "obj", "amf", "svg", "drc", "drcs", "settings", "slicedata", "3mf", "inspect_mesh", "inspect_paint", "info"]}, "options": {"type": "object"}, "name": {"type": "string"}, "layerHeight": {"type": "number"}}, ["path"]),
             orca_slice,
         ),

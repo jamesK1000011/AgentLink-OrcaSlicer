@@ -46,9 +46,18 @@ PAINT = {"supports": ("paint_supports", {"none": 0, "enforce": 1, "block": 2}),
 # Metadata a part or object carries that is bookkeeping, not a setting.
 BOOK = {"name", "matrix", "source_file", "source_object_id", "source_volume_id", "source_offset_x", "source_offset_y", "source_offset_z",
         "mesh_stat", "extruder", "mesh_shared", "volume_type", "source_in_inches", "source_in_meters", "texture_displacement"}
-PLATE_KEYS = {"name": "plater_name", "locked": "locked", "bed_type": "curr_bed_type", "print_sequence": "print_sequence",
+# A plate's own bed type is "bed_type" in model_settings.config (bbs_3mf.cpp
+# BED_TYPE_ATTR, read into the plate's curr_bed_type); a plate without one
+# takes the project's curr_bed_type.
+PLATE_KEYS = {"name": "plater_name", "locked": "locked", "bed_type": "bed_type", "print_sequence": "print_sequence",
               "first_layer_print_sequence": "first_layer_print_sequence", "other_layers_print_sequence": "other_layers_print_sequence",
               "spiral_mode": "spiral_mode", "filament_map_mode": "filament_map_mode", "filament_maps": "filament_maps"}
+
+# Each bed type and the filament setting holding a filament's bed
+# temperature on it: 0 means the filament does not go on that plate
+# (OrcaSlicer then stops: "<plate> does not support filament <n>").
+BED_TEMPS = {"Textured PEI Plate": "textured_plate_temp", "High Temp Plate": "hot_plate_temp", "Engineering Plate": "eng_plate_temp",
+             "Cool Plate": "cool_plate_temp", "Textured Cool Plate": "textured_cool_plate_temp", "Supertack Plate": "supertack_plate_temp"}
 
 _OPTIONS = None
 
@@ -1059,17 +1068,28 @@ class Project:
         self._dirty()
         return self.gcodes().get(plate, {"items": []})["items"]
 
-    def set_plate(self, plate, key, value):
+    def _plate_el(self, plate):
         el = next((p for p in self.settings_xml.findall("plate") if _meta(p).get("plater_id") == str(plate)), None)
         if el is None:
             raise ProjectError(f"plate {plate}: plates are {', '.join(str(p['plate']) for p in self.plates())}.")
+        return el
+
+    def bed_type(self, plate=None):
+        """The bed type a plate slices on: its own, else the project's."""
+        if plate:
+            m = _meta(self._plate_el(plate))
+            own = m.get("bed_type") or m.get("curr_bed_type")
+            if own:
+                return own
+        return self.config.get("curr_bed_type")
+
+    def set_plate(self, plate, key, value):
+        el = self._plate_el(plate)
         if key not in PLATE_KEYS:
             raise ProjectError(f"plate settings: {', '.join(PLATE_KEYS)}.")
         k = PLATE_KEYS[key]
-        if key == "bed_type" and value is not None:
-            ok = options()["options"].get("curr_bed_type", {}).get("values") or []
-            if ok and value not in ok:
-                raise ProjectError(f"bed_type: one of {', '.join(ok)}.")
+        if key == "bed_type":
+            return self.set_plate_bed_type(plate, value)
         if key == "locked":
             value = "true" if value in (True, "1", "true") else "false"
         if isinstance(value, list):
@@ -1077,6 +1097,88 @@ class Project:
         _set_meta(el, k, value)
         self._dirty()
         return self.plates()
+
+    def set_plate_bed_type(self, plate, value):
+        """A plate's bed type, written where OrcaSlicer reads it: the plate's
+        own bed_type in model_settings.config, and the project's
+        curr_bed_type too (the command line slices with it), the other
+        plates first given their own so they keep theirs. None or "" takes
+        the plate's own away. Read back: ProjectError if it did not take."""
+        ok = options()["options"].get("curr_bed_type", {}).get("values") or list(BED_TEMPS)
+        if value in (None, ""):
+            value = None
+        elif value not in ok:
+            raise ProjectError(f"bed_type {value!r}: one of {', '.join(ok)}.")
+        el = self._plate_el(plate)
+        _set_meta(el, "curr_bed_type", None)  # written by older versions of this tool; OrcaSlicer never read it
+        pinned = []
+        if value is not None:
+            project = self.config.get("curr_bed_type")
+            for p in self.settings_xml.findall("plate"):
+                m = _meta(p)
+                if p is el:
+                    continue
+                if m.get("curr_bed_type") and not m.get("bed_type"):
+                    _set_meta(p, "bed_type", m["curr_bed_type"])
+                _set_meta(p, "curr_bed_type", None)
+                if not _meta(p).get("bed_type") and project and project != value:
+                    _set_meta(p, "bed_type", project)
+                    pinned.append(int(m.get("plater_id") or 0))
+            self.config["curr_bed_type"] = value
+            self._mark_different("curr_bed_type")
+        _set_meta(el, "bed_type", value)
+        self._dirty()
+        got = self.bed_type(plate)
+        if value is not None and got != value:
+            raise ProjectError(f"plate {plate}: bed_type {value!r} did not take (it reads back {got!r}).")
+        return {"plate": plate, "bed_type": got, **({"pinned": {"plates": pinned, "bed_type": project}} if pinned else {})}
+
+    def used_filaments(self, plate=None):
+        """The filament slots (1..) the objects (on a plate, or all) print
+        with: the objects' and parts' own, every one when a part is painted
+        in colour."""
+        objs = self.objects()
+        if plate:
+            on = set(next((p["objects"] for p in self.plates() if p["plate"] == int(plate)), []))
+            objs = [o for o in objs if o["id"] in on]
+        n = len(self.config.get("filament_settings_id") or []) or 1
+        used = set()
+        for o in objs:
+            used.add(int(o.get("extruder") or 1))
+            for p in o["parts"]:
+                if p.get("kind", "normal_part") == "normal_part" and p.get("extruder"):
+                    used.add(int(p["extruder"]))
+                m = self.mesh(p)
+                if m and any((m[2] or {}).get("paint_color") or []):
+                    used.update(range(1, n + 1))
+        return sorted(x for x in used if 1 <= x <= n) or [1]
+
+    def plate_temp(self, bed, slot):
+        """A filament's bed temperature on a bed type, None when the project
+        does not say."""
+        v = self.config.get(BED_TEMPS.get(bed, ""))
+        if isinstance(v, list):
+            v = v[slot - 1] if slot - 1 < len(v) else (v[-1] if v else None)
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    def bed_types_for(self, slots=None):
+        """The bed types every filament in slots goes on (bed temperature
+        above 0), in order of preference."""
+        slots = slots or self.used_filaments()
+        return [b for b in BED_TEMPS if all((self.plate_temp(b, s) or 0) > 0 or self.plate_temp(b, s) is None for s in slots)]
+
+    def pick_bed_type(self, prefer=None, slots=None):
+        """A bed type the filaments go on: prefer (when they do), the
+        printer's default_bed_type, then Textured PEI, High Temp,
+        Engineering, Cool, Textured Cool, Supertack."""
+        ok = self.bed_types_for(slots)
+        for b in (prefer, self.config.get("default_bed_type")):
+            if b in ok:
+                return b, ok
+        return (ok[0] if ok else None), ok
 
     def move_to_plate(self, which, plate, instance=0):
         """An object's instance put on another plate (the plate made when it
@@ -1752,6 +1854,8 @@ class Project:
             if not data:
                 continue
             for k, val in data.items():
+                if isinstance(val, list) and not val:
+                    continue  # an empty list stops the slicer ("Assigning from an empty vector")
                 if k in t and k not in ("inherits", "name", "from", "type"):
                     self.config[k] = val
             key = {"machine": "printer_settings_id", "process": "print_settings_id"}[kind]
@@ -1764,6 +1868,8 @@ class Project:
                 n = self.add_filament(1)
             for i, data in enumerate(filaments):
                 for k, val in data.items():
+                    if isinstance(val, list) and not val:
+                        continue
                     if k in t and isinstance(self.config.get(k), list) and len(self.config[k]) >= n:
                         v = val[0] if isinstance(val, list) and val else val
                         self.config[k][i] = v

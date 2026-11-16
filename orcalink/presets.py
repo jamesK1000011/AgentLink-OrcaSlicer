@@ -122,13 +122,54 @@ def resolve(index, kind, name, _seen=None):
     if parent:
         flat = resolve(index, kind, parent, seen + [name])
     up = flat.get("_system")
-    flat.update({k: v for k, v in data.items() if k != "inherits"})
+    flat = merge(kind, flat, {k: v for k, v in data.items() if k != "inherits"})
     flat["name"] = name
     # The system preset this one stands on (itself when it is one): Bambu
     # Studio's command line names a printer by it when it checks a
     # process against it.
     flat["_system"] = name if not entries[0]["user"] and entries[0]["listed"] else up
     return flat
+
+
+# The key whose length says how many extruders (machine), or extruder
+# variants (process, filament), a preset's per-extruder lists hold.
+VARIANT_KEY = {"machine": "nozzle_diameter", "process": "print_extruder_variant", "filament": "filament_extruder_variant"}
+
+
+def variant_count(kind, data):
+    v = data.get(VARIANT_KEY[kind])
+    if kind == "machine" and not (isinstance(v, list) and v):
+        v = data.get("printer_extruder_variant")
+    return len(v) if isinstance(v, list) and v else 1
+
+
+def merge(kind, parent, child):
+    """A preset's own values put over what it inherits, as the slicer does
+    when it loads a user preset: a user preset keeps only what differs
+    (often one value of a list the system preset has per extruder or per
+    extruder variant), so a list it leaves empty keeps the parent's, and a
+    list shorter than the parent's per-extruder one is padded with its last
+    value to the same length, so each extruder keeps the person's value.
+    The slicer's command line stops on an empty list ("Assigning from an
+    empty vector") where its window would fill it in."""
+    out = dict(parent)
+    out.update({k: v for k, v in child.items() if not (isinstance(v, list) and not v)})
+    n = variant_count(kind, out)
+    if n > 1:
+        for k, v in child.items():
+            pv = parent.get(k)
+            if isinstance(v, list) and v and isinstance(pv, list) and len(pv) == n and len(v) < n:
+                out[k] = list(v) + [v[-1]] * (n - len(v))
+    return out
+
+
+def complete(kind, data):
+    """A flat preset made ready for the command line: no empty lists. The
+    command line copies each filament's lists into the project one value at
+    a time and stops on an empty one ("ConfigOptionVector::set_at():
+    Assigning from an empty vector"); left out, the slicer's own default
+    stands instead, as in its window."""
+    return {k: v for k, v in data.items() if not (isinstance(v, list) and not v)}
 
 
 def bundle(slicer, machine, process, filament, name=None):
@@ -202,7 +243,7 @@ def write_profiles(data, folder_):
     printer = m.get("_system") or m.get("name")
     paths = {}
     for k in KINDS:
-        part = {key: v for key, v in data[k].items() if key != "_system"}
+        part = complete(k, {key: v for key, v in data[k].items() if key != "_system"})
         system = data[k].get("_system")
         # Bambu Studio's command line takes a printer's name for the check
         # from the file itself when it is a system preset, else from its

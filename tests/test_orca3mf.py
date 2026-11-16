@@ -210,7 +210,42 @@ class Project(unittest.TestCase):
         pl = self.reopen().plates()
         self.assertEqual([p["objects"] for p in pl], [["2"], ["4"]])
         self.assertEqual(pl[1]["settings"]["plater_name"], "tall one")
-        self.assertEqual(pl[0]["settings"]["curr_bed_type"], "Textured PEI Plate")
+        # Written where OrcaSlicer reads it: the plate's own bed_type and the
+        # project's curr_bed_type; the other plate keeps the bed it had.
+        self.assertEqual(pl[0]["settings"]["bed_type"], "Textured PEI Plate")
+        self.assertNotIn("curr_bed_type", pl[0]["settings"])
+        pr = self.reopen()
+        self.assertEqual(pr.config["curr_bed_type"], "Textured PEI Plate")
+        self.assertEqual(pr.bed_type(1), "Textured PEI Plate")
+        self.assertEqual(pr.bed_type(2), "Cool Plate")
+        self.assertEqual(pl[1]["settings"]["bed_type"], "Cool Plate")
+
+    def test_plate_bed_type_old_key_and_clear(self):
+        pr = O.Project(self.p)
+        # What earlier versions of this tool wrote, and OrcaSlicer never read.
+        O._set_meta(pr._plate_el(1), "curr_bed_type", "High Temp Plate")
+        r = pr.set_plate(1, "bed_type", "Engineering Plate")
+        self.assertEqual(r["bed_type"], "Engineering Plate")
+        self.assertNotIn("curr_bed_type", pr.plates()[0]["settings"])
+        pr.set_plate(1, "bed_type", "")
+        self.assertNotIn("bed_type", pr.plates()[0]["settings"])
+        self.assertEqual(pr.bed_type(1), "Engineering Plate")  # the project's
+
+    def test_bed_type_for_the_filaments(self):
+        pr = O.Project(self.p)
+        self.assertEqual(pr.used_filaments(), [1])
+        # PLA goes on every plate; Textured PEI is the first choice.
+        self.assertEqual(pr.pick_bed_type()[0], "Textured PEI Plate")
+        self.assertEqual(pr.pick_bed_type("Cool Plate")[0], "Cool Plate")
+        # A PETG: 0 on the Cool Plate, so neither asked for nor chosen.
+        pr.config["cool_plate_temp"] = ["0", "35"]
+        pr.config["supertack_plate_temp"] = ["0", "35"]
+        bed, ok = pr.pick_bed_type("Cool Plate")
+        self.assertEqual(bed, "Textured PEI Plate")
+        self.assertNotIn("Cool Plate", ok)
+        self.assertIn("Cool Plate", pr.bed_types_for([2]))
+        pr.config["default_bed_type"] = "High Temp Plate"
+        self.assertEqual(pr.pick_bed_type()[0], "High Temp Plate")
 
     def test_remove_object(self):
         pr = O.Project(self.p)

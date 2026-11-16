@@ -105,6 +105,63 @@ class Calls(unittest.TestCase):
         r = self.ok("orca_slice", {"path": "p.3mf", "export": "svg", "layerHeight": 0.5})
         self.assertGreater(r["layers"], 10)
 
+    def test_plate_bed_type_read_back(self):
+        r = self.ok("orca_project", {"action": "set", "path": "p.3mf", "scope": "plate", "plate": 1, "key": "bed_type", "value": "Textured PEI Plate"})
+        self.assertEqual(r["bedType"], {"plate": 1, "readBack": "Textured PEI Plate"})
+        self.assertEqual(O.Project(self.p).config["curr_bed_type"], "Textured PEI Plate")
+        self.refused("orca_project", {"action": "set", "path": "p.3mf", "scope": "plate", "plate": 1, "key": "bed_type", "value": "Glass"}, "invalid_input")
+        r = self.ok("orca_project", {"action": "set", "path": "p.3mf", "key": "curr_bed_type", "value": "High Temp Plate"})
+        self.assertEqual(r["bedType"], {"project": "High Temp Plate"})
+
+    def test_new_picks_a_bed_the_filament_takes(self):
+        """The command line leaves a new project on Cool Plate; with PETG
+        (0 °C there) a bed it goes on is chosen instead."""
+        def fake(name, stls, dest, settings, profiles=None, options=None, timeout=600):
+            sample(dest)
+            pr = O.Project(dest)
+            pr.config["cool_plate_temp"] = ["0", "0"]
+            pr.changed = True
+            pr.save()
+            return "orca"
+
+        real = cli.make_project
+        cli.make_project = fake
+        try:
+            stl = os.path.join(self.d, "c.stl")
+            O.write_stl(stl, M.box(10, 10, 10))
+            r = self.ok("orca_project", {"action": "new", "files": [stl], "path": "n.3mf"})
+            self.assertEqual(r["bedType"], "Textured PEI Plate")
+            self.assertNotIn("Cool Plate", r["bedTypes"])
+            self.assertEqual(O.Project(r["project"]).config["curr_bed_type"], "Textured PEI Plate")
+            r = self.ok("orca_project", {"action": "new", "files": [stl], "path": "n2.3mf", "bed_type": "Cool Plate"})
+            self.assertEqual(r["bedType"], "Textured PEI Plate")
+            self.assertIn("bedTypeRefused", r)
+            r = self.ok("orca_project", {"action": "new", "files": [stl], "path": "n3.3mf", "bed_type": "High Temp Plate"})
+            self.assertEqual(r["bedType"], "High Temp Plate")
+        finally:
+            cli.make_project = real
+
+    def test_slice_bed_error_names_beds_that_work(self):
+        real = cli.slice_project
+        realfind = cli.find
+
+        def stop(*a, **k):
+            raise RuntimeError("Cool Plate does not support filament 1 (code -51)")
+
+        cli.slice_project, cli.find = stop, lambda name: "/bin/true"
+        try:
+            pr = O.Project(self.p)
+            pr.config["cool_plate_temp"] = ["0", "0"]
+            pr.changed = True
+            pr.save()
+            r = self.refused("orca_slice", {"path": "p.3mf"}, "failed")
+            msg = r["error"]["message"]
+            self.assertIn("Textured PEI Plate", msg)
+            self.assertNotIn("go on: Cool Plate", msg)
+            self.assertIn("curr_bed_type", msg)
+        finally:
+            cli.slice_project, cli.find = real, realfind
+
     def test_slicer_needed(self):
         if cli.find("orcaslicer"):
             self.skipTest("OrcaSlicer is here")
