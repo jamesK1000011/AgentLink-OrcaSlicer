@@ -129,6 +129,26 @@ class Manifest(unittest.TestCase):
             if name:
                 self.assertIn(name.group(1), self.m.get("user_config", {}))
 
+    def test_icon(self):
+        """The extension's icon: a PNG in the bundle's root (build.sh copies
+        it beside the manifest), square, 512 px as recommended (256 at
+        least), drawn from mcpb/icon.svg."""
+        import struct
+
+        icon = self.m.get("icon")
+        self.assertTrue(icon, "manifest has no icon")
+        self.assertFalse(icon.startswith(("/", "..")) or "://" in icon)
+        path = os.path.join(ROOT, "mcpb", icon)
+        self.assertTrue(os.path.isfile(path), path)
+        with open(path, "rb") as f:
+            head = f.read(24)
+        self.assertEqual(head[:8], b"\x89PNG\r\n\x1a\n")
+        w, h = struct.unpack(">II", head[16:24])
+        self.assertEqual(w, h)
+        self.assertGreaterEqual(w, 256)
+        self.assertTrue(os.path.isfile(os.path.join(ROOT, "mcpb", "icon.svg")))
+        self.assertIn('"$HERE/%s"' % icon, open(os.path.join(ROOT, "mcpb", "build.sh"), encoding="utf-8").read())
+
     def test_build_ships_the_server(self):
         files = open(os.path.join(ROOT, "FILES"), encoding="utf-8").read().split()
         for f in ("orcalink_server.py", "orcalink/server.py", "orcalink/tools.py"):

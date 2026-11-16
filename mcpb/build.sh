@@ -9,7 +9,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
 OUT=${1:-$HERE/orcaslicer-agentlink.mcpb}
 STAGE=$(mktemp -d)
-cp "$HERE/manifest.json" "$STAGE/"
+cp "$HERE/manifest.json" "$HERE/icon.png" "$STAGE/"
 mkdir -p "$STAGE/server" "$STAGE/app"
 cp "$HERE/server/index.js" "$STAGE/server/"
 grep -v -E '^(tests|mcpb)/|^#|^$' "$ROOT/FILES" | while read -r f; do

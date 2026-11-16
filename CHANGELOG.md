@@ -33,6 +33,30 @@ The first release, 0.1.0, is being prepared.
   `--bake-texture-displacement` (the agent-cli build); colour layers give
   relief only. A slicer without the option slices flat and says so.
 
+- The Claude extension has an icon (`mcpb/icon.png`, 512 px, drawn from
+  `mcpb/icon.svg`; original artwork), named in the manifest and packed by
+  `mcpb/build.sh`.
+- `orca_project new` chooses a bed type every filament goes on (its bed
+  temperature there above 0): `bed_type` when given and it fits, else the
+  printer's `default_bed_type`, else Textured PEI first. The answer lists
+  `bedTypes` that would work.
+- `orca_slice`: a slice stopped by "<plate> does not support filament <n>"
+  names the bed types that would work and how to set one.
+
+### Fixed
+
+- The person's own filament presets (a user preset on a system one) no longer
+  stop OrcaSlicer's command line with "ConfigOptionVector::set_at():
+  Assigning from an empty vector": a list the user preset leaves empty keeps
+  the inherited one, a list shorter than the preset's per-variant one is
+  padded with its last value, and no empty list is written.
+- `orca_project set` scope plate key `bed_type` took no effect: it wrote a
+  key OrcaSlicer does not read. It now writes the plate's own `bed_type` and
+  the project's `curr_bed_type` (other plates keep theirs), reads the value
+  back from the saved file, and is an error if it did not take.
+- New projects no longer default to Cool Plate whatever the filament, which
+  made PETG and others fail to slice.
+
 ### Changed
 
 - The bridge reads records and filament densities from Agent Link, now that

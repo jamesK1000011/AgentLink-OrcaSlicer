@@ -3,6 +3,8 @@ LICENSE
 README.md
 REUSE.toml
 mcpb/build.sh
+mcpb/icon.png
+mcpb/icon.svg
 mcpb/manifest.json
 mcpb/server/index.js
 mcpb/test/launcher.test.mjs

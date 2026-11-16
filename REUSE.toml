@@ -2,7 +2,7 @@
 version = 1
 
 [[annotations]]
-path = ["README.md", "FILES", "REUSE.toml", "mcpb/manifest.json", "orcalink/guides/**", "orcalink/freecad_guides/**", "CHANGELOG.md", ".github/**", "orcalink/data/slicer-minimal.json", "tests/data/**", ".gitignore"]
+path = ["README.md", "FILES", "REUSE.toml", "mcpb/manifest.json", "mcpb/icon.png", "orcalink/guides/**", "orcalink/freecad_guides/**", "CHANGELOG.md", ".github/**", "orcalink/data/slicer-minimal.json", "tests/data/**", ".gitignore"]
 SPDX-FileCopyrightText = "Agent Link for OrcaSlicer contributors"
 SPDX-License-Identifier = "LGPL-2.1-or-later"
 
