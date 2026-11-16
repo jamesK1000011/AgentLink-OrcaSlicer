@@ -141,6 +141,91 @@ class Calls(unittest.TestCase):
         finally:
             cli.make_project = real
 
+    def test_new_bodies_map_by_source_not_order_or_prefix(self):
+        """Two bodies whose names prefix each other ("Box", "Box lid"), and
+        Orca giving the objects back in another order (here reversed, with
+        full source paths): each object still names its own body, in new,
+        info and every action that finds the body by itself."""
+        from orcalink import tools as T
+
+        sizes = {"Box": (40, 30, 20), "Box lid": (40, 30, 3)}
+        asked = []
+
+        class Geo(T.Geo):
+            name = "FreeCAD"
+
+            def body(self, name):
+                # The loosest lookup a CAD side might have: whole name, else the
+                # first body whose name starts with it.
+                for k in sizes:
+                    if k == name:
+                        return k
+                for k in sizes:
+                    if name and k.startswith(name):
+                        return k
+                raise T.ToolError("not_found", name)
+
+            def label(self, b):
+                return b
+
+            def tris(self, b, tol=0.01):
+                return M.box(*sizes[b])
+
+            def bbox(self, b):
+                return [0, 0, 0, *sizes[b]]
+
+            def face_normal(self, b, face):
+                asked.append(b)
+                return [0, 0, -1]
+
+        def fake(name, stls, dest, settings, profiles=None, options=None, timeout=600):
+            sample(dest)
+            pr = O.Project(dest)
+            for o in list(pr.objects())[::-1]:
+                pr.remove_object(o["name"])
+            for f in sorted(stls, reverse=True):
+                pr.add_object(O.read_stl(f), os.path.basename(f))
+                # Orca records the path it loaded the file from.
+                for part in pr.settings_xml.findall("object")[-1].findall("part"):
+                    for m in part.findall("metadata"):
+                        if m.get("key") == "source_file":
+                            m.set("value", os.path.abspath(f))
+            pr.changed = True
+            pr.save()
+            return "orca"
+
+        real = cli.make_project
+        cli.make_project = fake
+        try:
+            srv = T.tools(self.d, Geo())
+            run = {t.name: t for t in srv}["orca_project"].fn
+            r = run({"action": "new", "bodies": ["Box", "Box lid"], "path": "enclosure.3mf"})
+            got = {o["name"]: o.get("body") for o in r["objects"]}
+            self.assertEqual(got, {"Box_lid.stl": "Box lid", "Box.stl": "Box"}, r["objects"])
+            self.assertEqual([o["name"] for o in r["objects"]], ["Box_lid.stl", "Box.stl"])  # Orca's order, not the bodies'
+            info = run({"action": "info", "path": "enclosure.3mf"})
+            self.assertEqual({o["name"]: o.get("body") for o in info["objects"]}, got)
+            # The project, saved again by another action, keeps the map.
+            run({"action": "set", "path": "enclosure.3mf", "object": "Box.stl", "key": "wall_loops", "value": 3})
+            info = run({"action": "info", "path": "enclosure.3mf", "object": "Box_lid.stl"})
+            self.assertEqual(info["body"], "Box lid")
+            # An action that finds the body itself asks for the right one.
+            run({"action": "lay_flat", "path": "enclosure.3mf", "object": "Box_lid.stl", "face": "Face1"})
+            run({"action": "lay_flat", "path": "enclosure.3mf", "object": "Box.stl", "face": "Face1"})
+            self.assertEqual(asked, ["Box lid", "Box"])
+            # Without the map (the project saved by Orca's window): whole names
+            # of the source file only, never a body the name merely starts.
+            pr = O.Project(r["project"])
+            pr.files.pop(T.BODY_MAP)
+            pr.save()
+            self.assertNotIn("body", run({"action": "info", "path": "enclosure.3mf"})["objects"][0])
+            del asked[:]
+            run({"action": "lay_flat", "path": "enclosure.3mf", "object": "Box_lid.stl", "face": "Face1"})
+            run({"action": "lay_flat", "path": "enclosure.3mf", "object": "Box.stl", "face": "Face1"})
+            self.assertEqual(asked, ["Box lid", "Box"])
+        finally:
+            cli.make_project = real
+
     def test_slice_bed_error_names_beds_that_work(self):
         real = cli.slice_project
         realfind = cli.find

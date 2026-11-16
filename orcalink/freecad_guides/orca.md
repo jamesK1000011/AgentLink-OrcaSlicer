@@ -3,7 +3,7 @@
 These tools are Agent Link for OrcaSlicer's (a separate add-on, github.com/jamesK1000011/AgentLink-OrcaSlicer), given FreeCAD's bodies, faces and kernel here.
 
 ## The loop
-1. `orca_project { action: new, bodies, path }` makes the project from FreeCAD bodies with the print setup's presets (`slicer_presets use` first, else minimal ones).
+1. `orca_project { action: new, bodies, path }` makes the project from FreeCAD bodies with the print setup's presets (`slicer_presets use` first, else minimal ones). Each object in the answer names its `body`, matched by the file Orca loaded it from (the project keeps the map, and `info` shows it), never by order: Orca sorts and arranges the files, so object 1 need not be the first body. Actions that find the body themselves (paint by `faces`, `lay_flat` by `face`, `part_add { of }`, `strength`) use the same map.
 2. Change it at any level with `orca_project set { scope project|object|part|range|plate, key, value | settings }` — every value is checked against OrcaSlicer's own table (`action: settings { query }` lists keys, types, limits, values). `slot` sets one filament's value.
 3. `orca_paint { object, faces, kind supports|seam|fuzzy_skin|color, state }` paints by FreeCAD face names; `where { normal, within, box, below, above }` paints by direction or place instead. `kind texture` with `texture { image | library, depth, tileSize, … }` adds a Texture Displacement layer on those faces; `orca_slice` bakes the relief as it slices (colour layers give relief only).
 4. `orca_slice { path }` slices it; `gcode_read` shows layers, moves and views.

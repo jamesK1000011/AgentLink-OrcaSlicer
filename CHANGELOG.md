@@ -6,6 +6,17 @@ All notable changes to Agent Link for OrcaSlicer. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `orca_project new` with bodies named each object after the wrong body when Orca
+  gave its objects back in another order ("Box" and "Box lid" swapped). The
+  body of each object now comes from the file Orca records it was loaded from
+  (`source_file`), kept in the project as `Metadata/agentlink_bodies.json`;
+  `info` reports it, and actions that find the body themselves (paint by faces,
+  `lay_flat`, `part_add { of }`, `strength`) use it. Without the map only whole
+  names match, never a body whose name merely starts the same. Two bodies
+  whose file names would clash get one file each.
+
 ## [0.1.0] - 2026-11-16
 
 The first release.
