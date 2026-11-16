@@ -24,7 +24,7 @@ def build(out_dir):
         topic = (a.get("topic") or "orca").replace("/", "")
         p = os.path.join(GUIDES, topic + ".md")
         if not os.path.isfile(p):
-            raise ToolError("not_found", f"topic: {', '.join(sorted(os.path.splitext(n)[0] for n in os.listdir(GUIDES)))}.")
+            raise ToolError("not_found", f"topic {a.get('topic')!r}: there is no such guide here; the topics are: {', '.join(sorted(os.path.splitext(n)[0] for n in os.listdir(GUIDES)))}.")
         with open(p, encoding="utf-8") as f:
             return {"topic": topic, "text": f.read()}
 
@@ -41,8 +41,10 @@ def build(out_dir):
 
     obj = T.obj
     tools = T.tools(lambda: out_dir) + [
-        Tool("guide_read", "How to use these tools, by topic (orca).", obj({"topic": {"type": "string"}}), guide_read),
-        Tool("orca_status", "Which OrcaSlicer (and Bambu Studio) is here, its version, and the output folder.", obj({}), orca_status),
+        Tool("guide_read", "The written guide to these tools. topic: orca (the only one here, and the default): the loop from project to slice to reading the G-code back, every orca_project action with its arguments, how bed types and filaments go together, and the traps. Read it once before the first orca_project call that is more than info or set. The reply: topic, text. An unknown topic is refused with the topics there are.",
+             obj({"topic": {"type": "string", "description": "orca (the default)."}}), guide_read),
+        Tool("orca_status", "What this server has to work with; call it first. No inputs. The reply: version (this server's), commit (when started from the extension), out (the output folder, where every relative path goes and files are written), orcaslicer (the path of the OrcaSlicer executable found, or null), orcaVersion, bambustudio (its path or null), and note when OrcaSlicer is not found (install it, or set AGENTLINK_ORCASLICER to its executable). Without OrcaSlicer, orca_project still reads and changes projects, orca_paint paints, gcode_read reads and orca_slice exports drc, drcs, svg, amf and obj; making a project (new), slicing, arrange, orient, cli, the other exports and orca_calibrate need it. Changes nothing.",
+             obj({}), orca_status),
     ]
     return Server("orcaslicer-agentlink", VERSION, tools, instructions=INSTRUCTIONS)
 

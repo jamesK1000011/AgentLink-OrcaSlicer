@@ -8,6 +8,28 @@ All notable changes to Agent Link for OrcaSlicer. The format follows
 
 ### Fixed
 
+- `orca_paint where` with a key that is not normal, within, box, below or above
+  (say `{ face: "top" }`) painted every triangle of the part. It is refused now,
+  with the keys there are; a normal or box of the wrong shape is refused too.
+- `orca_slice export: svg` with a negative `layerHeight` never reached the top
+  of the part and ran until memory was gone. `layerHeight` is 0.01 to 10 mm.
+- A call that left out `object`, `plate` or `slot` answered `failed: 'object'`.
+  Each action now says what it needs and where to read it; wrong shapes for
+  `box`, `points`, `profile`, `normal`, `axis`, `at` and `size` are refused in
+  words; a missing `file` or saved `bundle` answers not_found.
+- `part_add` and `replace` read a relative `file` from the server's working
+  folder; it is in the output folder now, as every other path is.
+- A missing project path was reported as "is not an OrcaSlicer project".
+- `orca_slice` exports drc, drcs, svg and obj with a plate the project does not
+  have say so, instead of "nothing printable".
+
+### Changed
+
+- Every tool's description says its inputs, numbering (objects, parts, plates
+  and slots from 1; instances, texture slots, layers and moves from 0), limits,
+  how long it can take and each field of the reply. The guide has a section
+  "Numbering, limits and time".
+
 - `orca_project new` with bodies named each object after the wrong body when Orca
   gave its objects back in another order ("Box" and "Box lid" swapped). The
   body of each object now comes from the file Orca records it was loaded from

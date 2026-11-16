@@ -256,6 +256,80 @@ class Calls(unittest.TestCase):
         self.refused("orca_slice", {"path": "p.3mf"}, "unavailable")
 
 
+class Hardening(Calls):
+    """16 Nov 2026: a wrong call is refused with what to give, never a bare
+    KeyError; an unknown where key no longer paints every triangle; a
+    negative layer height no longer runs until memory is gone."""
+
+    def test_a_missing_argument_is_named(self):
+        for action in ("part_add", "part_remove", "replace", "place", "plate", "object_remove", "instance", "printable", "layer_heights",
+                       "brim_ears", "mesh", "lay_flat", "copy", "instance_to_object", "scale_to_fit", "fill_bed", "grid", "strength"):
+            r = self.refused("orca_project", {"action": action, "path": "p.3mf"}, "invalid_input")
+            self.assertIn("object is needed", r["error"]["message"], action)
+        for action in ("plate_remove", "plate_move"):
+            r = self.refused("orca_project", {"action": action, "path": "p.3mf"}, "invalid_input")
+            self.assertIn("plate is needed", r["error"]["message"], action)
+        r = self.refused("orca_project", {"action": "set", "path": "p.3mf", "scope": "object", "key": "wall_loops", "value": 3}, "invalid_input")
+        self.assertIn("object is needed", r["error"]["message"])
+        r = self.refused("orca_project", {"action": "filament", "path": "p.3mf", "remove": True}, "invalid_input")
+        self.assertIn("slot is needed", r["error"]["message"])
+        r = self.refused("orca_project", {"action": "info"}, "invalid_input")
+        self.assertTrue(r["error"]["message"].startswith("path:"), r)
+        self.refused("orca_project", {"action": "info", "path": "nofile.3mf"}, "not_found")
+
+    def test_wrong_shapes_are_refused_in_words(self):
+        bad = [{"action": "part_add", "object": "box.stl", "box": [1, 2]},
+               {"action": "brim_ears", "object": "box.stl", "points": [[1]]},
+               {"action": "layer_heights", "object": "box.stl", "profile": [[1]]},
+               {"action": "lay_flat", "object": "box.stl", "normal": [1]},
+               {"action": "mesh", "object": "box.stl", "op": "cut", "axis": "w"},
+               {"action": "mesh", "object": "box.stl", "op": "cut", "at": "x"},
+               {"action": "mesh", "object": "box.stl", "op": "cut_grid", "size": "a"},
+               {"action": "instance_to_object", "object": "box.stl"}]
+        for a in bad:
+            r = self.refused("orca_project", {"path": "p.3mf", **a}, "invalid_input")
+            self.assertNotIn("failed:", r["error"]["message"], a)
+        for a in ({"action": "part_add", "object": "box.stl", "file": "nofile.stl"}, {"action": "replace", "object": "box.stl", "file": "nofile.stl"},
+                  {"action": "presets", "bundle": "nope"}):
+            self.refused("orca_project", {"path": "p.3mf", **a}, "not_found")
+
+    def test_a_relative_part_file_is_in_the_output_folder(self):
+        O.write_stl(os.path.join(self.d, "blk.stl"), M.box(2, 2, 2))
+        self.ok("orca_project", {"action": "part_add", "path": "p.3mf", "object": "box.stl", "file": "blk.stl"})
+        self.assertEqual(len(O.Project(self.p).object("box.stl")["parts"]), 2)
+
+    def test_where_keys_are_checked(self):
+        r = self.refused("orca_paint", {"path": "p.3mf", "object": "box.stl", "where": {"face": "top"}}, "invalid_input")
+        self.assertIn("where.face", r["error"]["message"])
+        self.refused("orca_paint", {"path": "p.3mf", "object": "box.stl", "where": {"within": 10}}, "invalid_input")
+        self.refused("orca_paint", {"path": "p.3mf", "object": "box.stl", "where": {"normal": [0, 0]}}, "invalid_input")
+        self.refused("orca_paint", {"path": "p.3mf", "object": "box.stl", "where": {"box": [1, 2]}}, "invalid_input")
+        self.refused("orca_paint", {"path": "p.3mf", "object": "box.stl", "kind": "color", "where": {"above": 0}, "state": "x"}, "invalid_input")
+        # Nothing was painted by the refused calls; a box's corners may come either way round.
+        self.assertNotIn("painted", self.ok("orca_project", {"action": "info", "path": "p.3mf", "object": "box.stl"})["parts"][0])
+        r = self.ok("orca_paint", {"path": "p.3mf", "object": "box.stl", "where": {"box": [[30, 30, 30], [-30, -30, -30]]}})
+        self.assertEqual(r["triangles"], 12)
+
+    def test_svg_layer_height_and_plate_bounds(self):
+        for lh in (-1, 0.0001, 50):
+            self.refused("orca_slice", {"path": "p.3mf", "export": "svg", "layerHeight": lh}, "invalid_input")
+        for what in ("svg", "drc", "obj"):
+            r = self.refused("orca_slice", {"path": "p.3mf", "export": what, "plate": 9}, "invalid_input")
+            self.assertIn("1 plate(s)", r["error"]["message"])
+
+    def test_gcode_read_of_a_missing_sliced_project(self):
+        r = self.refused("gcode_read", {"path": "none-sliced.3mf"}, "not_found")
+        self.assertIn("orca_slice", r["error"]["message"])
+
+    def test_every_description_says_its_reply(self):
+        tools = self.server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["result"]["tools"]
+        for t in tools:
+            self.assertTrue("reply" in t["description"].lower() or "answers" in t["description"], t["name"])
+        from orcalink import tools as T
+
+        self.assertEqual(set(T.WORDS), {t["name"] for t in tools} - {"guide_read", "orca_status"})
+
+
 @unittest.skipUnless(cli.find("orcaslicer"), "no OrcaSlicer here (AGENTLINK_ORCASLICER sets it; CI unpacks its AppImage)")
 class WithOrca(Calls):
     def test_loop(self):

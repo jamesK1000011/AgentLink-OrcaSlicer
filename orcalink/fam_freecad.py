@@ -210,6 +210,13 @@ def tools(session):
 
         return call
 
+    try:  # search words for tool_groups { find } (an Agent Link without the index: the tools still load)
+        from agentlink import toolindex
+
+        for name, words in OT.WORDS.items():
+            toolindex.declare(name, {"words": list(words)})
+    except Exception:  # noqa: BLE001
+        pass
     out = []
     for t in made:
         desc = t.description.replace("orca_paint paints it", "orca_paint paints it (by FreeCAD face)")

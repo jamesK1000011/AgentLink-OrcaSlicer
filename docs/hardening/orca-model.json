@@ -1,0 +1,444 @@
+{
+ "tutorial": "No FreeCAD wiki tutorial applies (OrcaSlicer is its own program). The model is the repo's own loop (orcalink/guides/orca.md, 'The loop'; tests/test_tools.py WithOrca.test_loop): two blocks made into a project, set, painted, sliced, read back, cut and sliced again, with this pass's refusals in between.",
+ "reference": null,
+ "conventions": {
+  "placeholders": "<BOX_STL> and <TALL_STL> are full paths of two STL files the runner makes first: a 20 x 10 x 5 mm box named box.stl and an 8 x 8 x 20 mm box named tall.stl (in FreeCAD: part_primitive box size [20, 10, 5] and [8, 8, 20], then export each as STL; or orcalink.meshgen.box with orcalink.orca3mf.write_stl). No call needs a value from an earlier answer: every later call names the project by the relative path hardening.3mf.",
+  "server": "These are the standalone OrcaSlicer extension's tools (mcp server 'OrcaSlicer Agent Link'). Under Agent Link for FreeCAD the same five orca tools exist with bodies; guide_read and orca_status there are Agent Link's own.",
+  "refused": "An expect starting REFUSED means isError with that code and no change to the project.",
+  "ranHere": "Every call that needs no OrcaSlicer was run here on the repo's sample project (the same two boxes) and gave the stated answers: settings, info sizes, set, range, part_add, gcode, instance, the paint counts 2 / 2 / 12-refused, svg 0.5 (100 layers at 0.2 here; 40 is arithmetic for 0.5), every refusal. new, arrange, the gcode slice, gcode_read of its result, the arranging after cut and orca_calibrate did not run here."
+ },
+ "expected": {
+  "box.stl": {
+   "size": [
+    20,
+    10,
+    5
+   ],
+   "triangles": 12
+  },
+  "tall.stl": {
+   "size": [
+    8,
+    8,
+    20
+   ],
+   "triangles": 12
+  },
+  "seamTrianglesTop": 2,
+  "supportTrianglesBottom": 2,
+  "cutTallAt12": {
+   "volumes_mm3": [
+    512,
+    768
+   ]
+  },
+  "svgLayersAt0.5mm": 40,
+  "slice": {
+   "layersAt0.2mm": "about 100",
+   "customGcode": "M117 hardening"
+  }
+ },
+ "calls": [
+  {
+   "tool": "orca_status",
+   "arguments": {},
+   "expect": "version, out (the output folder), orcaslicer (a path: the Mac has it) and orcaVersion; no note"
+  },
+  {
+   "tool": "guide_read",
+   "arguments": {
+    "topic": "orca"
+   },
+   "expect": "topic orca; text holds 'Numbering, limits and time'"
+  },
+  {
+   "tool": "guide_read",
+   "arguments": {
+    "topic": "nope"
+   },
+   "expect": "REFUSED not_found: names the topic orca"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "settings",
+    "query": "infill_density"
+   },
+   "expect": "count >= 1; settings includes key sparse_infill_density with type and limits; no path needed"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "new",
+    "files": [
+     "<BOX_STL>",
+     "<TALL_STL>"
+    ],
+    "path": "hardening.3mf",
+    "arrange": true
+   },
+   "expect": "project ends hardening.3mf; objects 2 (names box.stl and tall.stl, in OrcaSlicer's order, each with index); bedType one of bedTypes; next"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "info",
+    "path": "hardening.3mf"
+   },
+   "expect": "objects: box.stl size [20, 10, 5] with 12 triangles, tall.stl size [8, 8, 20] with 12 triangles; plates 1; filaments >= 1; sliced false; fromFile note"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "set",
+    "path": "hardening.3mf",
+    "settings": {
+     "sparse_infill_density": "25%",
+     "wall_loops": 3
+    }
+   },
+   "expect": "scope project; set.sparse_infill_density.now 25%, set.wall_loops.now 3; saved; next"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "set",
+    "path": "hardening.3mf",
+    "key": "sparse_infill_density",
+    "value": 300
+   },
+   "expect": "REFUSED invalid_input: names the limit; the project is not saved"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "set",
+    "path": "hardening.3mf",
+    "object": "tall.stl",
+    "key": "wall_loops",
+    "value": 4
+   },
+   "expect": "scope object, object tall.stl, set.wall_loops 4"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "info",
+    "path": "hardening.3mf",
+    "object": "tall.stl"
+   },
+   "expect": "effective.wall_loops 4, effective.sparse_infill_density 25%"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "set",
+    "path": "hardening.3mf",
+    "scope": "range",
+    "object": "tall.stl",
+    "zmin": 5,
+    "zmax": 10,
+    "settings": {
+     "sparse_infill_density": "80%"
+    }
+   },
+   "expect": "object tall.stl; ranges has one from 5 to 10"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "set",
+    "path": "hardening.3mf",
+    "scope": "object",
+    "key": "wall_loops",
+    "value": 3
+   },
+   "expect": "REFUSED invalid_input: 'object is needed' and says orca_project info lists them"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "part_add",
+    "path": "hardening.3mf",
+    "object": "box.stl",
+    "kind": "modifier_part",
+    "box": [
+     4,
+     4,
+     5
+    ],
+    "at": [
+     0,
+     0,
+     2.5
+    ],
+    "settings": {
+     "sparse_infill_density": "100%"
+    }
+   },
+   "expect": "a modifier part added to box.stl; saved"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "part_add",
+    "path": "hardening.3mf",
+    "object": "box.stl",
+    "box": [
+     4,
+     4
+    ]
+   },
+   "expect": "REFUSED invalid_input: box: [x, y, z] sizes in mm"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "gcode",
+    "path": "hardening.3mf",
+    "z": 2.0,
+    "kind": "custom",
+    "gcode": "M117 hardening"
+   },
+   "expect": "plate 1; gcodes lists the custom block at z 2"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "gcode",
+    "path": "hardening.3mf",
+    "z": 3.0,
+    "kind": "custom",
+    "gcode": "M500"
+   },
+   "expect": "REFUSED not_allowed: M500 saves settings to the printer; force only when the person asks"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "instance",
+    "path": "hardening.3mf",
+    "object": "box.stl",
+    "count": 2
+   },
+   "expect": "box.stl has 3 instances"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "instance_to_object",
+    "path": "hardening.3mf",
+    "object": "tall.stl"
+   },
+   "expect": "REFUSED invalid_input: tall.stl has 1 instance(s), cannot be split off"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "arrange",
+    "path": "hardening.3mf"
+   },
+   "expect": "done arrange; objects each with a placed box (OrcaSlicer rewrote the project)"
+  },
+  {
+   "tool": "orca_paint",
+   "arguments": {
+    "path": "hardening.3mf",
+    "object": "box.stl",
+    "kind": "seam",
+    "where": {
+     "normal": [
+      0,
+      0,
+      1
+     ]
+    },
+    "state": "block"
+   },
+   "expect": "kind seam, state block, triangles 2 (the box's top)"
+  },
+  {
+   "tool": "orca_paint",
+   "arguments": {
+    "path": "hardening.3mf",
+    "object": "box.stl",
+    "kind": "supports",
+    "where": {
+     "normal": [
+      0,
+      0,
+      -1
+     ]
+    }
+   },
+   "expect": "state enforce, triangles 2, note that enforced supports need enable_support"
+  },
+  {
+   "tool": "orca_paint",
+   "arguments": {
+    "path": "hardening.3mf",
+    "object": "box.stl",
+    "where": {
+     "face": "top"
+    }
+   },
+   "expect": "REFUSED invalid_input: where.face is not a way to choose triangles; lists normal, box, below, above. (Before this pass it painted all 12.)"
+  },
+  {
+   "tool": "orca_paint",
+   "arguments": {
+    "path": "hardening.3mf",
+    "object": "tall.stl",
+    "kind": "fuzzy_skin",
+    "where": {
+     "above": 10
+    }
+   },
+   "expect": "state fuzzy, triangles > 0"
+  },
+  {
+   "tool": "orca_paint",
+   "arguments": {
+    "path": "hardening.3mf",
+    "object": "box.stl",
+    "kind": "supports",
+    "clear": true
+   },
+   "expect": "triangles 0, state null: the supports paint of box.stl is gone; the seam paint stays (info shows painted: [seam])"
+  },
+  {
+   "tool": "orca_slice",
+   "arguments": {
+    "path": "hardening.3mf",
+    "export": "svg",
+    "layerHeight": 0.5
+   },
+   "expect": "export svg, path in hardening-out, layers 40 (the 20 mm part at 0.5 mm), layerHeight 0.5; no OrcaSlicer run"
+  },
+  {
+   "tool": "orca_slice",
+   "arguments": {
+    "path": "hardening.3mf",
+    "export": "svg",
+    "layerHeight": -1
+   },
+   "expect": "REFUSED invalid_input: layerHeight 0.01 to 10 mm. (Before this pass the call ran until memory was gone.)"
+  },
+  {
+   "tool": "orca_slice",
+   "arguments": {
+    "path": "hardening.3mf",
+    "export": "drc",
+    "plate": 9
+   },
+   "expect": "REFUSED invalid_input: this project has 1 plate(s)"
+  },
+  {
+   "tool": "orca_slice",
+   "arguments": {
+    "path": "hardening.3mf",
+    "export": "obj"
+   },
+   "expect": "export obj, files [one .obj in hardening-out]"
+  },
+  {
+   "tool": "orca_slice",
+   "arguments": {
+    "path": "hardening.3mf"
+   },
+   "expect": "gcode [paths in hardening-out], layers about 100 (20 mm at the minimal profile's 0.2 mm), filamentG > 0, time, sliced ends hardening-sliced.3mf, customGcode lists 'M117 hardening'; warnings or statistics when this build writes them; a small job: well inside one call"
+  },
+  {
+   "tool": "gcode_read",
+   "arguments": {
+    "path": "hardening-sliced.3mf"
+   },
+   "expect": "layers about 100, z [first, last about 20], features with Outer wall and Sparse infill, ranges, legend view feature"
+  },
+  {
+   "tool": "gcode_read",
+   "arguments": {
+    "path": "hardening-sliced.3mf",
+    "layer": 10,
+    "move": 0,
+    "svg": true
+   },
+   "expect": "layer.layer 10, layer.features, layer.moves > 0; move { move 0, of, kind, from, to, line, gcode }; svg a path that exists"
+  },
+  {
+   "tool": "gcode_read",
+   "arguments": {
+    "path": "hardening-sliced.3mf",
+    "layer": 100000
+   },
+   "expect": "layer.layer is the last layer's number (clamped): read the layer field"
+  },
+  {
+   "tool": "gcode_read",
+   "arguments": {
+    "path": "hardening.3mf"
+   },
+   "expect": "REFUSED invalid_state: holds no G-code, orca_slice first"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "mesh",
+    "path": "hardening.3mf",
+    "object": "tall.stl",
+    "op": "cut",
+    "axis": "z",
+    "at": 12
+   },
+   "expect": "cut tall.stl at 12; objects 2 (tall.stl upper and lower: volumes 512 and 768 mm3); arranged true"
+  },
+  {
+   "tool": "orca_project",
+   "arguments": {
+    "action": "mesh",
+    "path": "hardening.3mf",
+    "object": "box.stl",
+    "op": "cut",
+    "axis": "w"
+   },
+   "expect": "REFUSED invalid_input: axis x, y or z"
+  },
+  {
+   "tool": "orca_slice",
+   "arguments": {
+    "path": "hardening.3mf"
+   },
+   "expect": "slices again with the two pieces; gcode, layers, time"
+  },
+  {
+   "tool": "orca_calibrate",
+   "arguments": {
+    "kind": "temperature",
+    "params": {
+     "start": 230,
+     "end": 200
+    },
+    "path": "cal-temp.3mf"
+   },
+   "expect": "project ends cal-temp.3mf, kind temperature, objects 1, howToRead names 230 °C at the bottom and 5 °C steps; built with the minimal generic printer (no profiles given)"
+  },
+  {
+   "tool": "orca_calibrate",
+   "arguments": {
+    "kind": "temperature",
+    "params": {
+     "step": 3
+    }
+   },
+   "expect": "REFUSED invalid_input: the tower's blocks are 5 °C apart"
+  }
+ ],
+ "notCovered": [
+  "orca_project new with bodies, orca_paint faces, replace { body }, emboss, mesh simplify / boolean, lay_flat { face }: need Agent Link for FreeCAD (a model for that side belongs with the hub's orca family)",
+  "orca_paint kind texture and the bake at slicing: need the agent-cli build's Texture Displacement and a PNG; run by hand: orca_paint { kind: texture, texture: { library: \"Knurl\", depth: 0.4, tileSize: 5 }, where: { normal: [0, 0, 1] } }, then orca_slice and look for textures: baked",
+  "orca_project presets / new with machine, process, filament: needs the person's own preset names",
+  "cli options (repair, ground_largest_face, align_to_y_axis …): which builds take which was not verified",
+  "the other calibration kinds: same path as temperature with other models",
+  "orca_slice export stl, stls, settings, slicedata, 3mf, inspect_mesh, inspect_paint, info: run OrcaSlicer; one call each by hand"
+ ]
+}

@@ -19,6 +19,15 @@
 - OrcaSlicer's own: arrange, orient (options allow_rotations, align_to_y_axis …), cli { options } (uptodate, repair, clone_objects, repetitions, scale, rotate, ground_face_normal …).
 - info { object } (with its effective print settings), saveAs writes a copy.
 
+## Numbering, limits and time
+- Paths: a relative path is in the output folder (`orca_status` names it). Outputs of a slice or an export go in `<project>-out/`, the sliced project is `<project>-sliced.3mf`.
+- Objects are named or numbered from 1 as `info` lists them (a part of the name matches too: the first hit wins); parts from 1; instances from 0; plates from 1; filament slots from 1; texture layers (slots) from 0; G-code layers and moves from 0.
+- Lengths are mm and angles degrees. `where`, `box`, `at` for a part and `cut at` are in the object's own coordinates (`info` gives `size`); `place at` is [x, y] on the object's own plate; `info`'s `placed` is in the project's world, where plates stand side by side.
+- Limits: instance `count` 1 to 200, `grid` 1 to 50 each way, `fill_bed` 200 copies, `cut_grid` 400 pieces, `smooth` 1 to 50 iterations, 8 texture layers, `orca_slice` svg `layerHeight` 0.01 to 10 mm.
+- The tools work on the project file. A project that is open in OrcaSlicer's window is not updated: the person reloads it, and a save from the window afterwards overwrites the change.
+- Time: reading and changing a small project takes milliseconds; every call reads and writes the whole project, so large meshes cost more on each call (not measured). `new`, `arrange`, `orient`, `cli` and the exports that run OrcaSlicer are allowed 10 minutes, a slice 15; the server answers no other call meanwhile. When the client gives up on a long slice, the slice still finishes: `gcode_read { path: "<project>-sliced.3mf" }` reads it.
+- A refused value changes nothing: the project is saved only after every value of the call has been checked.
+
 ## Traps
 - Plates sit side by side in the project's world (a bed and a fifth apart): `place at` is on the object's own plate.
 - Calibrations (`orca_calibrate`) use the models of the OrcaSlicer on this computer; the retraction tower rewrites the sliced G-code, so slice it with `orca_slice`.
