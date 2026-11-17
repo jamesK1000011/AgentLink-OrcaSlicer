@@ -22,7 +22,7 @@ These tools are Agent Link for OrcaSlicer's (a separate add-on, github.com/james
 
 ## Numbering, limits and time
 - Paths: a relative path is in the output folder (`orca_status` names it). Outputs of a slice or an export go in `<project>-out/`, the sliced project is `<project>-sliced.3mf`.
-- Objects are named or numbered from 1 as `info` lists them (a part of the name matches too: the first hit wins); parts from 1; instances from 0; plates from 1; filament slots from 1; texture layers (slots) from 0; G-code layers and moves from 0.
+- Objects are named or numbered from 1 as `info` lists them (a part of the name matches too: the first hit wins); parts from 1; instances from 0; plates from 1; filament slots from 1; texture layers (slots) from 0; G-code layers from 1 as OrcaSlicer numbers them (layer 1 is the first, the last is the layer count), G-code moves from 0.
 - Lengths are mm and angles degrees. `where`, `box`, `at` for a part and `cut at` are in the object's own coordinates (`info` gives `size`); `place at` is [x, y] on the object's own plate; `info`'s `placed` is in the project's world, where plates stand side by side.
 - Limits: instance `count` 1 to 200, `grid` 1 to 50 each way, `fill_bed` 200 copies, `cut_grid` 400 pieces, `smooth` 1 to 50 iterations, 8 texture layers, `orca_slice` svg `layerHeight` 0.01 to 10 mm.
 - The tools work on the project file. A project that is open in OrcaSlicer's window is not updated: the person reloads it, and a save from the window afterwards overwrites the change.

@@ -147,6 +147,84 @@ class Presets(unittest.TestCase):
         self.assertEqual(m["filament"]["filament_type"], ["PETG"])
 
 
+class Includes(unittest.TestCase):
+    """OrcaSlicer 2.5's system presets as its source has them: a Bambu Lab
+    printer's start and end G-code in included template files, base names
+    such as fdm_machine_common in every vendor's folder with other values."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        root = self.root = os.path.join(self.tmp, "profiles")
+        generic = "G28\nG1 X10.1 Y20 Z0.28 F5000.0 ;Move to start position"
+        # Another vendor, sorted first, with the same base names.
+        put(root, "Anker/machine/fdm_machine_common.json", {"type": "machine", "name": "fdm_machine_common", "instantiation": "false",
+                                                            "machine_start_gcode": "ANKER", "retract_length_toolchange": ["4"], "nozzle_diameter": ["0.4"]})
+        put(root, "Anker/filament/fdm_filament_common.json", {"type": "filament", "name": "fdm_filament_common", "instantiation": "false", "filament_density": ["9"]})
+        put(root, "BBL/machine/fdm_machine_common.json", {"type": "machine", "name": "fdm_machine_common", "instantiation": "false",
+                                                          "machine_start_gcode": generic, "machine_end_gcode": "OLD END", "retract_length_toolchange": ["2"],
+                                                          "nozzle_diameter": ["0.4"]})
+        put(root, "BBL/machine/fdm_bbl_3dp_002_common.json", {"type": "machine", "name": "fdm_bbl_3dp_002_common", "inherits": "fdm_machine_common",
+                                                              "instantiation": "false", "machine_end_gcode": "BBL OLD END"})
+        put(root, "BBL/machine/Bambu Lab H2D 0.4 nozzle template machine_start_gcode.json",
+            {"type": "machine", "name": "Bambu Lab H2D 0.4 nozzle template machine_start_gcode", "instantiation": "false", "machine_start_gcode": ";===== machine: H2D\nM993 A0 B0 C0"})
+        put(root, "BBL/machine/Bambu Lab H2D 0.4 nozzle template machine_end_gcode.json",
+            {"type": "machine", "name": "Bambu Lab H2D 0.4 nozzle template machine_end_gcode", "instantiation": "false", "machine_end_gcode": ";== H2D end ==",
+             "z_hop": ["9"]})
+        put(root, "BBL/machine/Bambu Lab H2D 0.4 nozzle.json",
+            {"type": "machine", "name": "Bambu Lab H2D 0.4 nozzle", "inherits": "fdm_bbl_3dp_002_common", "from": "system", "instantiation": "true",
+             "nozzle_diameter": ["0.4", "0.4"], "z_hop": ["0.4"],
+             "include": ["Bambu Lab H2D 0.4 nozzle template machine_start_gcode", "Bambu Lab H2D 0.4 nozzle template machine_end_gcode"]})
+        put(root, "BBL/filament/fdm_filament_common.json", {"type": "filament", "name": "fdm_filament_common", "instantiation": "false", "filament_density": ["1.24"],
+                                                            "filament_extruder_variant": ["Direct Drive Standard"], "long_retractions_when_ec": ["0"]})
+        put(root, "BBL/filament/fdm_filament_template_direct_dual_e3d.json",
+            {"type": "filament", "name": "fdm_filament_template_direct_dual_e3d", "instantiation": "false",
+             "filament_extruder_variant": ["Direct Drive Standard", "Direct Drive High Flow", "Direct Drive E3D High Flow"],
+             "long_retractions_when_ec": ["1", "1", "1"], "filament_flow_ratio": ["0.95", "0.95", "0.95"]})
+        put(root, "BBL/filament/Bambu PLA Basic @BBL H2D.json",
+            {"type": "filament", "name": "Bambu PLA Basic @BBL H2D", "inherits": "fdm_filament_common", "instantiation": "true",
+             "filament_flow_ratio": ["0.98"], "include": ["fdm_filament_template_direct_dual_e3d"]})
+        os.environ["AGENTLINK_ORCA_PRESETS"] = root
+        self.old_cache, SP.ORCA_CACHE = SP.ORCA_CACHE, os.path.join(self.tmp, "no-cache")
+
+    def tearDown(self):
+        os.environ.pop("AGENTLINK_ORCA_PRESETS", None)
+        SP.ORCA_CACHE = self.old_cache
+
+    def test_included_gcode_is_the_printers_own(self):
+        m = SP.resolve(SP.scan("orcaslicer"), "machine", "Bambu Lab H2D 0.4 nozzle")
+        # Not the generic start G-code of fdm_machine_common, nor the old end
+        # G-code of fdm_bbl_3dp_002_common: the H2D's own, from its templates.
+        self.assertEqual(m["machine_start_gcode"], ";===== machine: H2D\nM993 A0 B0 C0")
+        self.assertEqual(m["machine_end_gcode"], ";== H2D end ==")
+        # The preset's own keys go over what it includes.
+        self.assertEqual(m["z_hop"], ["0.4"])
+        self.assertNotIn("include", m)
+        # The parent is the BBL folder's, not another vendor's of the same name.
+        self.assertEqual(m["retract_length_toolchange"], ["2"])
+
+    def test_included_per_nozzle_lists(self):
+        f = SP.resolve(SP.scan("orcaslicer"), "filament", "Bambu PLA Basic @BBL H2D")
+        self.assertEqual(f["long_retractions_when_ec"], ["1", "1", "1"])
+        self.assertEqual(f["filament_flow_ratio"], ["0.98", "0.98", "0.98"])
+        self.assertEqual(f["filament_density"], ["1.24"])  # BBL's base, not Anker's
+
+    def test_written_profile_carries_the_resolved_gcode(self):
+        idx = SP.scan("orcaslicer")
+        data = {"machine": SP.resolve(idx, "machine", "Bambu Lab H2D 0.4 nozzle"), "process": {"name": "p", "layer_height": "0.2"},
+                "filament": SP.resolve(idx, "filament", "Bambu PLA Basic @BBL H2D")}
+        paths = SP.write_profiles(data, os.path.join(self.tmp, "w"))
+        with open(paths["machine"]) as fh:
+            mach = json.load(fh)
+        self.assertTrue(mach["machine_start_gcode"].startswith(";===== machine: H2D"))
+        self.assertNotIn("include", mach)
+
+    def test_missing_include_stops(self):
+        os.remove(os.path.join(self.root, "BBL", "machine", "Bambu Lab H2D 0.4 nozzle template machine_start_gcode.json"))
+        with self.assertRaises(SP.PresetError) as e:
+            SP.resolve(SP.scan("orcaslicer"), "machine", "Bambu Lab H2D 0.4 nozzle")
+        self.assertIn("template machine_start_gcode", str(e.exception))
+
+
 class OrcaFetch(unittest.TestCase):
     """OrcaSlicer's packed presets: the same version's JSON fetched by git
     from a repository (a local one here) and read like the rest."""

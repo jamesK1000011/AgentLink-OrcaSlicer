@@ -84,7 +84,13 @@ def scan(slicer):
             if kind is None:
                 continue
             listed = str(data.get("instantiation", "true")).lower() != "false"
-            index[kind].setdefault(data["name"], []).append({"path": path, "root": root, "user": user, "listed": listed})
+            # The vendor folder (BBL, Creality …) a system preset sits in:
+            # base names such as fdm_machine_common are in every vendor's
+            # folder, with different values, and the slicer looks a parent
+            # up in the child's own vendor first.
+            rel = os.path.relpath(path, root).split(os.sep)
+            vendor = rel[0] if len(rel) >= 3 else None
+            index[kind].setdefault(data["name"], []).append({"path": path, "root": root, "user": user, "listed": listed, "vendor": vendor})
     return index
 
 
@@ -106,28 +112,71 @@ def listing(slicer, kind=None, query=None, limit=60):
     return out
 
 
-def resolve(index, kind, name, _seen=None):
+# Keys of an included file that say what the file is, not settings.
+_META = ("name", "type", "inherits", "include", "instantiation", "from", "setting_id", "filament_id", "description", "renamed_from")
+# OrcaSlicer's shared filament library: a vendor's filament may stand on a
+# base kept there when the vendor's own folder lacks it.
+BASE_VENDOR = "OrcaFilamentLibrary"
+
+
+def _entry(index, kind, name, near=None):
+    """The file for a preset name. A name that several vendors' folders
+    hold (fdm_machine_common, fdm_process_common …: their values differ) is
+    taken from the folder of the preset that asks for it (near), then from
+    OrcaSlicer's filament library beside it, then the first found, as the
+    slicer looks a parent up in the vendor's own bundle, then its base
+    bundle."""
+    entries = index[kind].get(name)
+    if not entries:
+        return None
+    if near is not None and near.get("vendor"):
+        for vendor in (near["vendor"], BASE_VENDOR):
+            for e in entries:
+                if e["root"] == near["root"] and e.get("vendor") == vendor:
+                    return e
+    return entries[0]
+
+
+def _includes(data):
+    inc = data.get("include")
+    if not inc:
+        return []
+    return [inc] if isinstance(inc, str) else [x for x in inc if isinstance(x, str) and x]
+
+
+def resolve(index, kind, name, _seen=None, _near=None):
     """A preset with what it inherits merged under it: the slicer's JSON,
-    flat."""
+    flat. As OrcaSlicer 2.5 loads its system presets: the parent (inherits)
+    first, then each file the preset includes ("include": a list of names;
+    Bambu Lab printers keep their start, end, layer-change, filament-change
+    and time-lapse G-code in such files, and filaments their per-nozzle
+    lists), in the order listed, then the preset's own keys on top. An
+    include that is not there stops it: left out, a printer would take a
+    generic start G-code."""
     seen = _seen or []
     if name in seen:
         raise PresetError(f"{kind} preset {name!r} inherits from itself ({' > '.join(seen + [name])}).")
-    entries = index[kind].get(name)
-    if not entries:
+    entry = _entry(index, kind, name, _near)
+    if entry is None:
+        if seen:
+            raise PresetError(f"{kind} preset {seen[-1]!r} inherits or includes {name!r}, which is not among the presets read: fetch that vendor's presets again (or the person's slicer lacks it).")
         raise PresetError(f"No {kind} preset named {name!r}: slicer_presets list (or the slicer's own presets list) shows those there are — machine, process and filament names, exactly.")
-    with open(entries[0]["path"], encoding="utf-8") as f:
+    with open(entry["path"], encoding="utf-8") as f:
         data = json.load(f)
     parent = data.get("inherits")
     flat = {}
     if parent:
-        flat = resolve(index, kind, parent, seen + [name])
+        flat = resolve(index, kind, parent, seen + [name], entry)
     up = flat.get("_system")
-    flat = merge(kind, flat, {k: v for k, v in data.items() if k != "inherits"})
+    for inc in _includes(data):
+        got = resolve(index, kind, inc, seen + [name], entry)
+        flat = merge(kind, flat, {k: v for k, v in got.items() if k not in _META and k != "_system"})
+    flat = merge(kind, flat, {k: v for k, v in data.items() if k not in ("inherits", "include")})
     flat["name"] = name
     # The system preset this one stands on (itself when it is one): Bambu
     # Studio's command line names a printer by it when it checks a
     # process against it.
-    flat["_system"] = name if not entries[0]["user"] and entries[0]["listed"] else up
+    flat["_system"] = name if not entry["user"] and entry["listed"] else up
     return flat
 
 

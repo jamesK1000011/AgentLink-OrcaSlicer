@@ -10,6 +10,15 @@ preview's: feature type, height, width, speed, fan speed, temperature,
 volumetric flow, layer time, tool, acceleration. A layer's toolpaths can be
 drawn as an SVG, coloured by any view.
 
+Layers are numbered from 1, as OrcaSlicer numbers them in the file
+("; layer num/total_layer_count: 1/25") and on its preview's slider: the
+last layer's number is the layer count. When the file marks its layers
+(CHANGE_LAYER, LAYER_CHANGE, LAYER:n), a layer starts only at a mark, so
+the printer's start G-code (its purge lines) is not a layer; OrcaSlicer's
+MACHINE_START_GCODE_END and MACHINE_END_GCODE_START marks bound the
+printer's own start and end G-code, which are kept out of the layers,
+features, ranges, tools and events and reported apart (machineGcode).
+
 Times are the moves' lengths over their feedrates (no acceleration): good
 for comparing layers and features; the slicer's own estimate (from the
 file's header) is the one to quote for the whole print. No FreeCAD needed.
@@ -22,10 +31,15 @@ VIEWS = ("feature", "height", "width", "speed", "actual_speed", "fan", "temperat
 
 _NUM = re.compile(r"([A-Za-z])\s*(-?\d*\.?\d+(?:[eE][-+]?\d+)?)")
 _TYPE = re.compile(r"^;\s*(?:TYPE|FEATURE)\s*:\s*(.+?)\s*$")
-_WIDTH = re.compile(r"^;\s*WIDTH\s*:\s*([\d.]+)")
-_HEIGHT = re.compile(r"^;\s*HEIGHT\s*:\s*([\d.]+)")
+# PrusaSlicer and older OrcaSlicer: ;WIDTH: / ;HEIGHT:. OrcaSlicer 2.5 and
+# Bambu Studio: ; LINE_WIDTH: / ; LAYER_HEIGHT: (their reserved tags).
+_WIDTH = re.compile(r"^;\s*(?:LINE_)?WIDTH\s*:\s*([\d.]+)")
+_HEIGHT = re.compile(r"^;\s*(?:LAYER_)?HEIGHT\s*:\s*([\d.]+)")
 _Z = re.compile(r"^;\s*(?:Z|Z_HEIGHT)\s*[:=]\s*([\d.]+)")
 _LAYER = re.compile(r"^;\s*(LAYER_CHANGE|CHANGE_LAYER|LAYER:\s*\d+)\s*$")
+_ANY_LAYER = re.compile(r"^;\s*(?:LAYER_CHANGE|CHANGE_LAYER|LAYER:\s*\d+)\s*$", re.M)
+_START_END = re.compile(r"^;\s*MACHINE_START_GCODE_END\b")
+_END_START = re.compile(r"^;\s*MACHINE_END_GCODE_START\b")
 _HEADER = {
     "time": (r";\s*estimated printing time \(normal mode\)\s*=\s*(.+)", r";\s*total estimated time\s*:\s*(.+)", r";\s*model printing time\s*:\s*([^;]+)"),
     "filamentG": (r";\s*(?:total )?filament used \[g\]\s*=\s*([\d.,\s]+)", r";\s*total filament weight \[g\]\s*:\s*([\d.,\s]+)"),
@@ -73,8 +87,8 @@ def _rng(vals):
 
 
 def read(path, keep_paths=None, filament_diameter=1.75):
-    """Replay the file. keep_paths: the layer indexes whose moves to keep
-    (for drawing); None keeps none."""
+    """Replay the file. keep_paths: the layer numbers (from 1) whose moves
+    to keep (for drawing); None keeps none, "all" every one."""
     with open(path, encoding="utf-8", errors="replace") as f:
         text = f.read()
     header = {}
@@ -93,10 +107,22 @@ def read(path, keep_paths=None, filament_diameter=1.75):
     layers, cur = [], None
     keep = _ALL if keep_paths == "all" else set(keep_paths or [])
     pending_z = None
+    # A file that marks its layers starts one only at a mark: what comes
+    # before the first is the printer's start G-code, not a layer.
+    marked = bool(_ANY_LAYER.search(text))
+    # The printer's own start and end G-code: replayed (positions, heat,
+    # tool) but counted apart, not in a layer.
+    machine = {}
+    ended = False
+
+    def mach(where, lineno):
+        m = machine.setdefault(where, {"lines": [lineno, lineno], "filamentMm": 0.0, "timeS": 0.0, "temperature": set(), "tools": set()})
+        m["lines"][1] = lineno
+        return m
 
     def new_layer(z):
         nonlocal cur
-        cur = _Layer(len(layers), z)
+        cur = _Layer(len(layers) + 1, z)
         cur.tools.add(tool)
         # What holds from the layer before (set before any move here).
         cur.fan.add(fan)
@@ -111,6 +137,12 @@ def read(path, keep_paths=None, filament_diameter=1.75):
         if not line:
             continue
         if line.startswith(";"):
+            if _END_START.match(line):
+                ended, cur, pending_z = True, None, None
+                mach("end", lineno)
+                continue
+            if ended:
+                continue
             if _LAYER.match(line):
                 pending_z = "next"
                 continue
@@ -149,6 +181,8 @@ def read(path, keep_paths=None, filament_diameter=1.75):
         if not code:
             continue
         head = code.split()[0].upper()
+        where = "end" if ended else ("start" if cur is None and marked else None)
+        mm = mach(where, lineno) if where else None
         if pending_z == "next" and head in ("G0", "G1") and "Z" in code.upper():
             pass
         if head in ("G90",):
@@ -165,9 +199,12 @@ def read(path, keep_paths=None, filament_diameter=1.75):
                     pos[k.upper()] = float(v)
         elif head in ("M106",):
             s = dict((k.upper(), float(v)) for k, v in _NUM.findall(code[4:]))
-            fan = round(100.0 * s.get("S", 255.0) / 255.0, 1)
-            if cur is not None:
-                cur.fan.add(fan)
+            # The part cooling fan, as OrcaSlicer's preview reads it: M106
+            # with no P, or P1 (Bambu's part fan); P2, P3 are other fans.
+            if s.get("P", 1.0) == 1.0:
+                fan = round(100.0 * s.get("S", 255.0) / 255.0, 1)
+                if cur is not None:
+                    cur.fan.add(fan)
         elif head == "M107":
             fan = 0.0
             if cur is not None:
@@ -176,14 +213,18 @@ def read(path, keep_paths=None, filament_diameter=1.75):
             s = dict((k.upper(), float(v)) for k, v in _NUM.findall(code[4:]))
             if "S" in s:
                 temp = s["S"]
-                if cur is not None:
+                if mm is not None:
+                    mm["temperature"].add(temp)
+                elif cur is not None:
                     cur.temp.add(temp)
         elif head == "M204":
             s = dict((k.upper(), float(v)) for k, v in _NUM.findall(code[4:]))
             accel = s.get("S", s.get("P", accel))
         elif re.fullmatch(r"T\d+", head):
             tool = int(head[1:])
-            if cur is not None:
+            if mm is not None:
+                mm["tools"].add(tool)
+            elif cur is not None:
                 cur.tools.add(tool)
                 cur.events.append(f"tool {tool}")
         elif head in COLOR_CHANGES or code.upper() in PAUSES or head in ("M601", "M25", "M0", "M1"):
@@ -212,9 +253,14 @@ def read(path, keep_paths=None, filament_diameter=1.75):
                 if sweep == 0:
                     sweep = 2 * math.pi
                 dist = math.hypot(r * sweep, dz)
-            if cur is None and (de > 0 and dist > 0):
+            if cur is None and not marked and not ended and (de > 0 and dist > 0):
                 new_layer(new["Z"])
+                mm = None
             secs = dist / (feed / 60.0) if feed > 0 else 0.0
+            if mm is not None:
+                mm["timeS"] += secs
+                if de > 0:
+                    mm["filamentMm"] += de
             kept = cur is not None and cur.index in keep
             if cur is not None and de < -1e-9 and math.hypot(dx, dy) < 1e-9:
                 cur.retracts += 1
@@ -260,7 +306,12 @@ def read(path, keep_paths=None, filament_diameter=1.75):
                     if kept:
                         cur.steps.append(("wipe" if wiping else "travel", lineno, pos["X"], pos["Y"], new["X"], new["Y"], round(speed, 2), role or "?"))
             pos = new
-    return {"header": header, "layers": layers, "path": path}
+    for m in machine.values():
+        m["filamentMm"] = round(m["filamentMm"], 1)
+        m["timeS"] = round(m["timeS"], 1)
+        m["temperature"] = sorted(m["temperature"])
+        m["tools"] = sorted(m["tools"])
+    return {"header": header, "layers": layers, "path": path, "machine": machine}
 
 
 def summary(data):
@@ -294,20 +345,28 @@ def summary(data):
             "layer_time": _rng([ly.time + ly.travel_time for ly in L]),
             "acceleration": _rng([a for ly in L for a in ly.accels]),
         },
+        **({"machineGcode": data["machine"]} if data.get("machine") else {}),
     }
 
 
-def layer(data, index=None, z=None):
+def _at(L, number):
+    """The layer of a number from 1 (negative: from the top, -1 the last);
+    past the top gives the last."""
+    i = int(number)
+    if i == 0:
+        raise ValueError("layer: numbered from 1, as OrcaSlicer numbers them (negative counts from the top: -1 is the last).")
+    i = i - 1 if i > 0 else i + len(L)
+    return L[max(0, min(len(L) - 1, i))]
+
+
+def layer(data, number=None, z=None):
     L = data["layers"]
     if not L:
         return None
     if z is not None:
         ly = min(L, key=lambda x: abs(x.z - float(z)))
     else:
-        i = int(index if index is not None else 0)
-        if i < 0:
-            i += len(L)
-        ly = L[max(0, min(len(L) - 1, i))]
+        ly = _at(L, number if number is not None else 1)
     return {
         "layer": ly.index, "z": round(ly.z, 3), "height": ly.height, "timeS": round(ly.time + ly.travel_time, 1), "travelMm": round(ly.travel, 1),
         "features": {k: {"lengthMm": round(f["length"], 1), "filamentMm": round(f["filament"], 2), "timeS": round(f["time"], 1), "speed": _rng(f["speed"]),
@@ -318,11 +377,11 @@ def layer(data, index=None, z=None):
     }
 
 
-def move(data, index, n):
-    """The nth move (0..) of a kept layer, as the preview's move slider and
-    G-code window show it: its kind, where from and to, speed, feature, and
-    the G-code line (number and text)."""
-    ly = data["layers"][index]
+def move(data, number, n):
+    """The nth move (0..) of a kept layer (number from 1), as the preview's
+    move slider and G-code window show it: its kind, where from and to,
+    speed, feature, and the G-code line (number and text)."""
+    ly = _at(data["layers"], number)
     if not ly.steps:
         raise ValueError("no moves kept for that layer: read it with keep_paths")
     if n < 0:
@@ -344,7 +403,8 @@ def move(data, index, n):
 def toolpaths_obj(data, out, layers=None):
     """The extrusions as ribbons (width x layer height boxes along each
     move), one OBJ file: the preview's Export toolpaths as OBJ. Read with
-    keep_paths for the layers wanted ("all" for every one)."""
+    keep_paths for the layers wanted ("all" for every one); layers: their
+    numbers from 1."""
     vs, fs = [], []
     for ly in data["layers"]:
         if layers is not None and ly.index not in layers:
@@ -418,10 +478,11 @@ def legend(data, view, buckets=6):
 _PALETTE = ["#e8553e", "#f2a33a", "#f7d04b", "#7bc24a", "#3fa7a3", "#3d7bd9", "#7a5fd1", "#c25bb5", "#8a8a8a", "#4f4f4f"]
 
 
-def svg(data, index, view="feature", size=600, show=()):
-    """One layer's extrusion moves as an SVG, coloured by a view; show
-    travel, wipe, retract, seams draws those too (the preview's toggles)."""
-    ly = data["layers"][index]
+def svg(data, number, view="feature", size=600, show=()):
+    """One layer's (number from 1) extrusion moves as an SVG, coloured by a
+    view; show travel, wipe, retract, seams draws those too (the preview's
+    toggles)."""
+    ly = _at(data["layers"], number)
     if not ly.paths:
         raise ValueError("no moves kept for that layer: read it with keep_paths")
     xs = [p[1] for p in ly.paths] + [p[3] for p in ly.paths]

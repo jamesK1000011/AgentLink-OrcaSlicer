@@ -13,6 +13,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 import zipfile
 
 from . import prusa
@@ -192,7 +193,9 @@ def slice_project(name, threemf, out_dir, timeout=900, export=None, plate=0, opt
             raise RuntimeError(f"options.{k}: one of {', '.join(list(SLICE_FLAGS) + list(SLICE_VALUES))}.")
     args += [os.path.abspath(threemf)]
     LAST.clear()
+    t0 = time.time()
     run = _run(args, timeout, cwd=out_dir)
+    orca_ms = int((time.time() - t0) * 1000)
     found = sorted(glob.glob(os.path.join(out_dir, "*.gcode")))
     if export and os.path.isfile(os.path.join(out_dir, "sliced.3mf")):
         shutil.move(os.path.join(out_dir, "sliced.3mf"), export)
@@ -200,6 +203,7 @@ def slice_project(name, threemf, out_dir, timeout=900, export=None, plate=0, opt
         why = result_error(out_dir)
         raise RuntimeError((why + " — " if why else "") + _tail(run))
     LAST.update(results(out_dir))
+    LAST["orcaMs"] = orca_ms
     return exe, found
 
 
@@ -390,10 +394,11 @@ def results(out_dir):
             r = json.load(f)
         warns = [w for w in (r.get("warnings") or []) if w]
         warns += [p["warning_message"] for p in (r.get("sliced_plates") or []) if p.get("warning_message")]
-        if warns:
-            out["warnings"] = warns
+        # Always there once result.json is read: [] is OrcaSlicer saying
+        # nothing, not a list that was not read.
+        out["warnings"] = warns
     except (OSError, ValueError):
-        pass
+        out["warnings"] = None
     stats = sorted(glob.glob(os.path.join(out_dir, "plate_*.statistics.json")))
     if stats:
         try:

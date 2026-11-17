@@ -86,6 +86,11 @@ def plan(kind, params, cfg):
         start, end, step = float(p.get("start", 230)), float(p.get("end", 190)), float(p.get("step", 5))
         if step != 5:
             raise ValueError("temperature: the tower's blocks are 5 °C apart (step 5).")
+        if start < end:
+            # The tower's blocks carry their temperatures on the model, the
+            # hottest at the bottom: a tower that warmed going up would print
+            # each block at another temperature than its label says.
+            raise ValueError(f"temperature: start is the bottom block and the hottest (the model's labels go down going up): start {start:g} is below end {end:g} (end is 190 when left out): give the hotter one as start.")
         temps = _steps(start, end, step)
         top = (500 - min(start, end)) / 5 + 1
         bottom = (500 - max(start, end)) / 5
@@ -93,7 +98,8 @@ def plan(kind, params, cfg):
         out["slot"] = {"nozzle_temperature": int(temps[0]), "nozzle_temperature_initial_layer": int(temps[0])}
         out["object"] = {"brim_type": "outer_only", "brim_width": 5, "brim_object_gap": 0, "seam_slope_type": "none"}
         out["gcodes"] = [[i * 10.0, f"M104 S{int(t)} ; temperature tower block {int(t)}"] for i, t in enumerate(temps) if i]
-        out["read"] = f"Blocks of 10 mm from {int(temps[0])} °C at the bottom, {int(step)} °C cooler each block up: pick the block with the cleanest bridges and overhangs."
+        out["read"] = (f"{len(temps)} blocks of 10 mm, from {int(temps[0])} °C at the bottom to {int(temps[-1])} °C at the top, {int(step)} °C cooler each block up: "
+                       "pick the block with the cleanest bridges and overhangs.")
     elif kind == "pressure_advance":
         start, end, step = float(p.get("start", 0)), float(p.get("end", 0.1)), float(p.get("step", 0.002))
         vals = _steps(start, end, step)

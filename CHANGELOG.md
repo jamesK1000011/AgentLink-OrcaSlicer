@@ -22,13 +22,42 @@ All notable changes to Agent Link for OrcaSlicer. The format follows
 - A missing project path was reported as "is not an OrcaSlicer project".
 - `orca_slice` exports drc, drcs, svg and obj with a plate the project does not
   have say so, instead of "nothing printable".
+- Presets: a preset's `include` files were ignored. OrcaSlicer 2.5 keeps a Bambu
+  Lab printer's start, end, layer-change, filament-change and time-lapse G-code
+  in included template files, so a "Bambu Lab H2D 0.4 nozzle" was written with
+  the generic start G-code of `fdm_machine_common` (purge lines at X10 Y20 to
+  Y200) and an older Bambu end G-code. Includes are now layered between the
+  parent and the preset's own keys, as OrcaSlicer does; a missing include stops
+  with its name. Filaments get their per-nozzle lists from their includes too.
+- Presets: a parent name that several vendors' folders hold
+  (`fdm_machine_common`, `fdm_process_common` …, with other values in each) is
+  now taken from the child's own vendor folder, then OrcaSlicer's filament
+  library, as OrcaSlicer looks it up; it was the first found, often another
+  vendor's.
+- `gcode_read` counted the start G-code's purge lines as a first layer (26
+  layers where OrcaSlicer wrote 25, first z 0.28), read no height or width from
+  OrcaSlicer 2.5's `; LAYER_HEIGHT:` and `; LINE_WIDTH:` tags, took the end
+  G-code's `M104 S0` into the temperature range and Bambu's `T255` unload as a
+  tool, and read another fan (`M106 P2`) as the part fan. The printer's own
+  start and end G-code is now kept out of layers, features, ranges, tools and
+  events and reported apart as `machineGcode`.
+- `orca_calibrate` temperature: `howToRead` names both ends and the block count;
+  a `start` below `end` is refused (the tower's labels get cooler going up).
+- `orca_slice` always answers `warnings` ([] when OrcaSlicer said none), and
+  `orcaMs`, the time its command line ran.
 
 ### Changed
 
 - Every tool's description says its inputs, numbering (objects, parts, plates
-  and slots from 1; instances, texture slots, layers and moves from 0), limits,
+  and slots from 1; instances, texture slots and moves from 0), limits,
   how long it can take and each field of the reply. The guide has a section
   "Numbering, limits and time".
+- `gcode_read` numbers layers from 1, as OrcaSlicer does in its G-code ("layer
+  num/total_layer_count") and on its preview's slider: the last layer's number
+  is the layer count orca_slice answers. Layer 0 is refused.
+- `gcode_read` with `layer`, `z`, `move` or `svg` answers that and only the
+  whole print's `layers` and `z` (`totals: true` adds the rest): for the live
+  test's call, 2201 characters became 887.
 
 - `orca_project new` with bodies named each object after the wrong body when Orca
   gave its objects back in another order ("Box" and "Box lid" swapped). The

@@ -32,6 +32,14 @@ class Plans(unittest.TestCase):
         self.assertEqual(p["slot"]["nozzle_temperature"], 230)
         with self.assertRaises(ValueError):
             C.plan("temperature", {"step": 3}, {})
+        # The live run's call: both ends and the block count are named.
+        read = C.plan("temperature", {"start": 230, "end": 200}, {})["read"]
+        for want in ("230 °C at the bottom", "200 °C at the top", "7 blocks", "5 °C"):
+            self.assertIn(want, read)
+        # The model's labels get cooler going up: a tower that warmed going
+        # up would print blocks at other temperatures than their labels.
+        with self.assertRaises(ValueError):
+            C.plan("temperature", {"start": 200, "end": 230}, {})
 
     def test_flow_from_names(self):
         self.assertEqual(C.flow_for("flowrate_m5", {"linear": False, "current": 0.98}), 0.95)

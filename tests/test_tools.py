@@ -321,6 +321,33 @@ class Hardening(Calls):
         r = self.refused("gcode_read", {"path": "none-sliced.3mf"}, "not_found")
         self.assertIn("orca_slice", r["error"]["message"])
 
+    def test_gcode_read_one_layer_is_short(self):
+        from test_gcode_view import ORCA25
+
+        with open(os.path.join(self.d, "o.gcode"), "w") as f:
+            f.write(ORCA25)
+        whole = self.ok("gcode_read", {"path": "o.gcode"})
+        self.assertEqual((whole["layers"], whole["z"]), (2, [0.2, 0.4]))
+        self.assertIn("machineGcode", whole)
+        # One layer asked for: that, with only the two short totals.
+        r = self.ok("gcode_read", {"path": "o.gcode", "layer": 2, "move": 0, "svg": True})
+        self.assertEqual(set(r) - {"ms"}, {"layers", "z", "layer", "move", "svg"})
+        self.assertEqual((r["layer"]["layer"], r["layer"]["z"]), (2, 0.4))
+        self.assertTrue(r["svg"].endswith("-layer2-feature.svg") and os.path.isfile(r["svg"]))
+        # totals: true gives the whole-print part too, nothing lost.
+        t = self.ok("gcode_read", {"path": "o.gcode", "layer": 2, "totals": True})
+        for k in ("slicer", "features", "tools", "events", "ranges", "legend", "machineGcode"):
+            self.assertEqual(t[k], whole[k], k)
+        self.assertIn("numbered from 1", self.refused("gcode_read", {"path": "o.gcode", "layer": 0}, "invalid_input")["error"]["message"])
+
+    def test_slice_warnings_always_there(self):
+        out = os.path.join(self.d, "res")
+        os.makedirs(out)
+        self.assertIsNone(cli.results(out)["warnings"])  # no result.json: not read
+        with open(os.path.join(out, "result.json"), "w") as f:
+            json.dump({"return_code": 0, "warnings": []}, f)
+        self.assertEqual(cli.results(out)["warnings"], [])
+
     def test_every_description_says_its_reply(self):
         tools = self.server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["result"]["tools"]
         for t in tools:
