@@ -8,6 +8,10 @@ All notable changes to Agent Link for OrcaSlicer. The format follows
 
 ### Fixed
 
+- gcode_read counts Bambu wipes: OrcaSlicer writes "; WIPE_START" and
+  "; WIPE_END" (one space after ";") for Bambu printers. Before, only
+  ";WIPE_START" counted, so wipes on Bambu G-code were 0.
+
 - Live 92: gcode_read's machineGcode lists only filament tools; Bambu
   firmware codes (T255, T1000, T1001, T65279, T65535) go in `machineCodes`.
 - Live 91: a new project with a printer and no process or filament takes the

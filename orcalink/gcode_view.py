@@ -38,6 +38,8 @@ _HEIGHT = re.compile(r"^;\s*(?:LAYER_)?HEIGHT\s*:\s*([\d.]+)")
 _Z = re.compile(r"^;\s*(?:Z|Z_HEIGHT)\s*[:=]\s*([\d.]+)")
 _LAYER = re.compile(r"^;\s*(LAYER_CHANGE|CHANGE_LAYER|LAYER:\s*\d+)\s*$")
 _ANY_LAYER = re.compile(r"^;\s*(?:LAYER_CHANGE|CHANGE_LAYER|LAYER:\s*\d+)\s*$", re.M)
+_WIPE_START = re.compile(r"^;\s*WIPE_START\b")
+_WIPE_END = re.compile(r"^;\s*WIPE_END\b")
 _START_END = re.compile(r"^;\s*MACHINE_START_GCODE_END\b")
 _END_START = re.compile(r"^;\s*MACHINE_END_GCODE_START\b")
 _HEADER = {
@@ -158,12 +160,14 @@ def read(path, keep_paths=None, filament_diameter=1.75):
             if m:
                 role = m.group(1)
                 continue
-            if line.startswith(";WIPE_START"):
+            # ";WIPE_START" (PrusaSlicer, Orca for other printers) or
+            # "; WIPE_START" (Bambu printers: one space after ";").
+            if _WIPE_START.match(line):
                 wiping = True
                 if cur is not None:
                     cur.wipes += 1
                 continue
-            if line.startswith(";WIPE_END"):
+            if _WIPE_END.match(line):
                 wiping = False
                 continue
             m = _WIDTH.match(line)

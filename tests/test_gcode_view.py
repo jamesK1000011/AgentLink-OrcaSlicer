@@ -121,6 +121,18 @@ class Preview(unittest.TestCase):
         self.assertEqual(ly["seams"], [[0.0, 0.0]] if isinstance(ly["seams"][0], list) else [(0.0, 0.0)])
         self.assertEqual(ly["moves"], 7)  # the lift to the layer, 3 extrusions, retract, wipe, travel
 
+    def test_bambu_wipe_tags(self):
+        # Bambu printers write "; WIPE_START" with one space after ";".
+        text = SAMPLE.replace(";WIPE_START", "; WIPE_START").replace(";WIPE_END", "; WIPE_END")
+        self.assertIn("; WIPE_START", text)
+        fd, p = tempfile.mkstemp(suffix=".gcode")
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        try:
+            self.assertEqual(G.layer(G.read(p, keep_paths={1}), 1)["wipes"], 1)
+        finally:
+            os.remove(p)
+
     def test_move_slider(self):
         d = G.read(self.path, keep_paths={1})
         m = G.move(d, 1, 1)
