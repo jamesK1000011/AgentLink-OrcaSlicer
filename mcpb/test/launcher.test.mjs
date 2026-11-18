@@ -102,5 +102,22 @@ await status()
 for (let i = 0; i < 100 && !JSON.parse(fs.readFileSync(path.join(cache, 'state.json'), 'utf8')).bad; i++) await new Promise((r) => setTimeout(r, 200))
 check(JSON.parse(fs.readFileSync(path.join(cache, 'state.json'), 'utf8')).bad.includes(head), 'a commit that does not load is kept out')
 check((await status()).commit === 'a'.repeat(7), 'the good version goes on serving')
+// The pinned add-ons that FreeCAD Agent Link's launcher publishes into the
+// app folder (addons/<repository>/<package>, with addons/.id), as for
+// PrintLoop: orca_status lists them with no ORCALINK_ADDONS, and a newer
+// commit fetched here keeps them.
+const pkg = path.join(cache, 'app-' + 'a'.repeat(40), 'addons', 'ZZLoop-OrcaSlicer', 'zzloop')
+fs.mkdirSync(pkg, { recursive: true })
+fs.writeFileSync(path.join(pkg, '__init__.py'), '')
+fs.writeFileSync(path.join(pkg, 'orcalink_addon.py'), 'VERSION = "0.1"\n\ndef tools(ctx):\n    return [{"name": "zzloop_score", "description": "Score.", "fn": lambda a: {"ok": True}}]\n')
+fs.writeFileSync(path.join(cache, 'app-' + 'a'.repeat(40), 'addons', '.id'), 'a'.repeat(40) + '+ZZLoop-OrcaSlicer@' + '1'.repeat(40) + '\n')
+const withAddon = await status()
+check(withAddon.commit === 'a'.repeat(7) && (withAddon.addons || []).some((x) => x.module === 'zzloop.orcalink_addon' && x.tools.includes('zzloop_score')), 'orca_status lists the published add-on')
+head = 'c'.repeat(40)
+await status()
+for (let i = 0; i < 100 && JSON.parse(fs.readFileSync(path.join(cache, 'state.json'), 'utf8')).current !== head; i++) await new Promise((r) => setTimeout(r, 200))
+check(fs.existsSync(path.join(cache, 'app-' + head, 'addons', 'ZZLoop-OrcaSlicer', 'zzloop', 'orcalink_addon.py')), 'a newer commit fetched here keeps the published add-ons')
+const after = await status()
+check(after.commit === head.slice(0, 7) && (after.addons || []).some((x) => x.module === 'zzloop.orcalink_addon'), 'the newer commit lists them too')
 srv.close()
-console.log('launcher: serves the checkout over stdio, says what is missing without a Python, updates in the background and keeps a broken commit out')
+console.log('launcher: serves the checkout over stdio, says what is missing without a Python, updates in the background and keeps a broken commit out, lists the published add-ons and keeps them on a newer commit')

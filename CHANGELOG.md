@@ -13,6 +13,14 @@ All notable changes to Agent Link for OrcaSlicer. The format follows
   adds its tools to this server. The server names no add-on. With none
   installed, nothing is added and no tokens are spent. orca_status lists the
   add-ons loaded (addons) and left out (addonsSkipped).
+- The server also searches the addons folder of its own app copy
+  (app-<commit>/addons/<repository>/<package>). FreeCAD Agent Link's
+  launcher puts the pinned add-ons there at agentlink_update. No variable
+  and no clone are necessary. The server never searches a user folder such
+  as ~/AgentLink by default.
+- A change of the pinned add-ons at the same commit (addons/.id) starts the
+  server again in place at the next call. The extension's own update keeps
+  the addons folder when it fetches a newer commit.
 
 ### Fixed
 

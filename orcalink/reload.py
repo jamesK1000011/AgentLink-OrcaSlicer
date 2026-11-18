@@ -9,6 +9,8 @@
 # it starts itself again in place (os.execve): the process, and so the pipes
 # to Claude, stay. Claude does not send initialize again, so its parameters
 # and any input already read go to the new process in a hand-off file.
+# The pinned add-ons in the app folder (addons/, with addons/.id) can change
+# at the same commit: a new addons/.id also starts the server again in place.
 import base64
 import json
 import os
@@ -19,6 +21,18 @@ import tempfile
 
 SHA = re.compile(r"[0-9a-f]{40}")
 ENTRY = "orcalink_server.py"
+# This app copy: the folder that holds the orcalink package.
+APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def addons_id(app):
+    """The text of <app>/addons/.id ("" when there is none): what FreeCAD
+    Agent Link's launcher put in the app folder's addons folder."""
+    try:
+        with open(os.path.join(app, "addons", ".id"), encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
 
 
 def cache_dir(env=None):
@@ -57,10 +71,12 @@ class Reloader:
     output folder; loads(dir): True when the folder's server builds (the
     same check the launcher makes before a version is used)."""
 
-    def __init__(self, out_dir, env=None, loads=None, execve=None):
+    def __init__(self, out_dir, env=None, loads=None, execve=None, app=None):
         self.env = os.environ if env is None else env
         self.out_dir = out_dir
         self.own = self.env.get("ORCALINK_VERSION") or ""
+        # The add-ons this process started with.
+        self.own_addons = addons_id(APP if app is None else app)
         self.init = None
         self.refused = set()
         self.loads = loads or _loads
@@ -92,10 +108,15 @@ class Reloader:
             with open(p, encoding="utf-8") as f:
                 st = json.load(f)
             cur = st.get("current")
-            if isinstance(cur, str) and SHA.fullmatch(cur) and cur != self.own and cur not in (st.get("bad") or []) and cur not in self.refused:
+            if isinstance(cur, str) and SHA.fullmatch(cur) and cur not in (st.get("bad") or []):
                 d = os.path.join(cache_dir(self.env), "app-" + cur)
-                if os.path.isfile(os.path.join(d, ENTRY)):
+                if cur != self.own and cur not in self.refused and os.path.isfile(os.path.join(d, ENTRY)):
                     found = (d, cur)
+                elif cur == self.own and os.path.isfile(os.path.join(d, ENTRY)):
+                    # The same commit with other add-ons: start again in place.
+                    now = addons_id(d)
+                    if now != self.own_addons and (cur + "+" + now) not in self.refused:
+                        found = (d, cur)
         except (OSError, ValueError, AttributeError):
             found = None
         self._seen = (t, found)
@@ -125,7 +146,7 @@ class Reloader:
             return False
         d, version = got
         if not self.loads(d):
-            self.refused.add(version)
+            self.refused.add(version if version != self.own else version + "+" + addons_id(d))
             self._seen = None
             return False
         self.go(d, version, reader.pending() if reader is not None else b"")

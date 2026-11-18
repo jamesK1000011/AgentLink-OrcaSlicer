@@ -1,9 +1,17 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Add-ons for this server, found by convention and never named here.
 
-An add-on is a package on the Python path (or in a folder that the
-ORCALINK_ADDONS variable lists, separated as PATH is) that holds a module
-orcalink_addon.py. That module has tools(ctx): a list of tools as dicts
+An add-on is a package that holds a module orcalink_addon.py. The server
+looks for it in these places, in this order:
+- each folder that the ORCALINK_ADDONS variable lists (separated as PATH is);
+- each child folder of the "addons" folder of this app copy (APP_ADDONS:
+  the folder beside the orcalink package). Each child is a repository root
+  that holds a package. FreeCAD Agent Link's launcher puts the pinned
+  add-ons there at agentlink_update (packaging/addons.json, serverAddons);
+- the Python path.
+The server never searches the user's writable folders (such as ~/AgentLink)
+by default: an add-on folder that the agent can write would let it run code
+without the person's OK. That module has tools(ctx): a list of tools as dicts
 {name, description, inputSchema, fn, changes?, group?}. ctx gives
 out_dir, tools (this server's own tool functions by name), ToolError and
 api (1). The module may also give VERSION, LICENSE and CREDIT, which
@@ -27,9 +35,25 @@ LOADED = []
 SKIPPED = []
 
 
+# The add-ons of this app copy: <app>/addons/<repository>/<package>. Found
+# from this module's own place, never from a user folder.
+APP_ADDONS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "addons")
+
+
+def app_dirs(root=None):
+    """The repository roots in this app copy's addons folder, sorted."""
+    root = APP_ADDONS if root is None else root
+    try:
+        names = sorted(os.listdir(root))
+    except OSError:
+        return []
+    return [os.path.join(root, n) for n in names if not n.startswith((".", "_")) and os.path.isdir(os.path.join(root, n))]
+
+
 def _dirs():
     env = os.environ.get("ORCALINK_ADDONS", "")
     extra = [os.path.expanduser(d) for d in env.split(os.pathsep) if d.strip()]
+    extra += [d for d in app_dirs() if d not in extra]
     for d in extra:
         if os.path.isdir(d) and d not in sys.path:
             sys.path.append(d)

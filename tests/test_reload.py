@@ -106,6 +106,28 @@ class Newer(unittest.TestCase):
         self.assertEqual(line, '{"id": 2}\n')
 
 
+class AddonsChange(unittest.TestCase):
+    """The same commit with other pinned add-ons (addons/.id): the server
+    starts again in place; with the same add-ons it does not."""
+
+    def test_new_addons_id(self):
+        d = cache_with(A, current=A)
+        app = os.path.join(d, "app-" + A)
+        os.makedirs(os.path.join(app, "addons"))
+        with open(os.path.join(app, "addons", ".id"), "w") as f:
+            f.write(A + "+X@1\n")
+        rl = reload.Reloader("/tmp", env={"ORCALINK_CACHE": d, "ORCALINK_VERSION": A}, app=app)
+        self.assertIsNone(rl.newer())
+        with open(os.path.join(app, "addons", ".id"), "w") as f:
+            f.write(A + "+X@2\n")
+        state(d, A)  # the launcher writes state.json too (hubPinned)
+        self.assertEqual(rl.newer(), (app, A))
+        # Add-ons that do not load: left, and not tried again.
+        rl.loads = lambda p: False
+        self.assertFalse(rl.check(None))
+        self.assertIsNone(rl.newer())
+
+
 class InPlace(unittest.TestCase):
     """The real thing: a server process from version A, state.json moved to
     B between two calls, the next call answered by B in the same process."""

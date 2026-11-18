@@ -87,6 +87,61 @@ class Addons(unittest.TestCase):
         self.assertIn("gcode_read", names)
         self.assertEqual(addons.SKIPPED[0]["module"], "zzaddon.orcalink_addon")
 
+    def zzpkg(self, parent):
+        pkg = os.path.join(parent, "zzaddon")
+        os.makedirs(pkg)
+        open(os.path.join(pkg, "__init__.py"), "w").close()
+        with open(os.path.join(pkg, "orcalink_addon.py"), "w") as f:
+            f.write(ADDON)
+
+    def test_app_addons_folder(self):
+        # <app>/addons/<repository>/<package>: what FreeCAD Agent Link's
+        # launcher puts there. Found with no ORCALINK_ADDONS.
+        os.environ.pop("ORCALINK_ADDONS", None)
+        app_addons = os.path.join(self.d, "addons")
+        self.zzpkg(os.path.join(app_addons, "ZZ-Repo"))
+        os.makedirs(os.path.join(app_addons, ".hidden"))
+        old = addons.APP_ADDONS
+        addons.APP_ADDONS = app_addons
+        try:
+            self.assertEqual(addons.app_dirs(), [os.path.join(app_addons, "ZZ-Repo")])
+            server = build(self.out)
+            self.assertIn("zz_hello", self.names(server))
+            st = json.loads(server.handle({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "orca_status", "arguments": {}}})["result"]["content"][0]["text"])
+            self.assertEqual([a["module"] for a in st["addons"]], ["zzaddon.orcalink_addon"])
+        finally:
+            addons.APP_ADDONS = old
+            p = os.path.join(app_addons, "ZZ-Repo")
+            if p in sys.path:
+                sys.path.remove(p)
+
+    def test_app_addons_is_beside_the_package(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(addons.__file__)))
+        self.assertEqual(addons.APP_ADDONS, os.path.join(root, "addons"))
+        self.assertEqual(addons.app_dirs(os.path.join(self.d, "nothing-here")), [])
+
+    def test_agentlink_folder_is_never_searched(self):
+        # A folder the agent can write (~/AgentLink) is never searched by
+        # default: an add-on there would be code run without the person's OK.
+        os.environ.pop("ORCALINK_ADDONS", None)
+        home = os.path.join(self.d, "home")
+        al = os.path.join(home, "AgentLink")
+        self.zzpkg(al)
+        self.zzpkg(os.path.join(al, "addons", "ZZ-Repo"))
+        self.zzpkg(os.path.join(al, "orcaslicer", "addons", "ZZ-Repo"))
+        old_home = os.environ.get("HOME")
+        os.environ["HOME"] = home
+        try:
+            dirs = addons._dirs()
+            self.assertFalse([d for d in dirs if d and os.path.abspath(d).startswith(al)], dirs)
+            self.assertNotIn("zzaddon.orcalink_addon", addons.found())
+            self.assertNotIn("zz_hello", self.names(build(self.out)))
+        finally:
+            if old_home is None:
+                os.environ.pop("HOME", None)
+            else:
+                os.environ["HOME"] = old_home
+
     def test_no_addon_named_in_orcalink(self):
         here = os.path.join(os.path.dirname(__file__), "..", "orcalink")
         for root, _, files in os.walk(here):

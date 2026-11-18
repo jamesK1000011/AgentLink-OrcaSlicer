@@ -101,6 +101,11 @@ async function updateInBackground(py) {
         fs.writeFileSync(p, await get(`${RAW}/${OWNER}/${REPO}/${sha}/${f}`))
       }))
     }
+    // The pinned add-ons that FreeCAD Agent Link's launcher put in the
+    // current app folder (addons/, its serverAddons) come along: a newer
+    // commit fetched here keeps them until that launcher publishes again.
+    const carry = st.current ? path.join(versionDir(st.current), 'addons') : null
+    if (carry && fs.existsSync(carry)) fs.cpSync(carry, path.join(stage, 'addons'), { recursive: true, filter: (f) => !/(^|\/)__pycache__(\/|$)/.test(f) })
     // It must at least import and build its tools before it is used.
     const chk = spawnSync(py, ['-I', '-c', 'import sys; sys.path.insert(0, sys.argv[1]); from orcalink.server import build; build(sys.argv[2])', stage, fs.mkdtempSync(path.join(os.tmpdir(), 'orcalink-check-'))], { encoding: 'utf8', timeout: 60000 })
     if (chk.status !== 0) {
