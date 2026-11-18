@@ -6,6 +6,17 @@ All notable changes to Agent Link for OrcaSlicer. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- New code without a restart of Claude (live 68; `orcalink/reload.py`). The
+  server reads its launcher's `state.json` between two calls. When `current`
+  names another version and that version loads, the server starts itself
+  again in place (`os.execve`): the process and its pipes stay. The
+  `initialize` parameters and any input already read go to the new process
+  in a hand-off file, so the next call is answered by the new code with no
+  new `initialize`. `orca_status` gives `reloadedFrom`. A checkout
+  (`ORCALINK_FROM`) or `auto_update: false` is never swapped.
+
 ### Fixed
 
 - Presets: OrcaSlicer reads its own folders, then Bambu Studio's (the person's

@@ -28,6 +28,7 @@ orcalink/presets.py
 orcalink/printstrength.py
 orcalink/protocol.py
 orcalink/prusa.py
+orcalink/reload.py
 orcalink/server.py
 orcalink/texdisp.py
 orcalink/tools.py
@@ -48,6 +49,7 @@ tests/test_printstrength.py
 tests/test_prusa.py
 tests/test_redteam.py
 tests/test_release.py
+tests/test_reload.py
 tests/test_texdisp.py
 tests/test_tools.py
 tools/gen_readme_tools.py

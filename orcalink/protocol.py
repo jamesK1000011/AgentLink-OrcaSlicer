@@ -335,8 +335,9 @@ class Server:
         return {"content": [{"type": "text", "text": compact({"error": {"code": code, "message": message}})}], "isError": True}
 
 
-def serve_lines(server, readline, write):
-    """Read a message a line until the input ends; write each reply a line."""
+def serve_lines(server, readline, write, seen=None):
+    """Read a message a line until the input ends; write each reply a line.
+    seen(msg): told each message read (orcalink/reload.py keeps initialize's)."""
     while True:
         line = readline()
         if not line:
@@ -349,6 +350,8 @@ def serve_lines(server, readline, write):
         except ValueError:
             write(compact({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "not JSON"}}) + "\n")
             continue
+        if seen is not None:
+            seen(msg)
         reply = server.handle(msg)
         if reply is not None:
             write(compact(reply) + "\n")
