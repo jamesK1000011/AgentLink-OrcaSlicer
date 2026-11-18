@@ -227,7 +227,7 @@ class Orca25(unittest.TestCase):
         m = s["machineGcode"]
         self.assertEqual(m["start"]["filamentMm"], 30.0)
         self.assertEqual(m["start"]["temperature"], [205.0])
-        self.assertEqual((m["end"]["tools"], m["end"]["temperature"]), ([255], [0.0]))
+        self.assertEqual((m["end"]["tools"], m["end"]["temperature"], m["end"]["machineCodes"]), ([], [0.0], ["T255"]))
 
     def test_layers_as_orca_numbers_them(self):
         d = G.read(self.path)
@@ -241,3 +241,21 @@ class Orca25(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MachineCodes(unittest.TestCase):
+    def test_firmware_t_codes_are_not_tools(self):
+        # Live 18 Nov (92): Bambu start/end G-code holds T1000, T1001, T65279, T65535.
+        import tempfile
+        from orcalink import gcode_view as GV
+        g = "\n".join(["; HEADER_BLOCK_START", "; HEADER_BLOCK_END", "T1000", "T0", "M104 S220", "G1 X1 Y1 E1",
+                       "; MACHINE_START_GCODE_END", "; CHANGE_LAYER", "; Z_HEIGHT: 0.2", "; LAYER_HEIGHT: 0.2",
+                       "; FEATURE: Outer wall", "; LINE_WIDTH: 0.45", "G1 X10 Y1 E0.5 F3000",
+                       "; MACHINE_END_GCODE_START", "T65535", "M104 S0", ""])
+        p = tempfile.mktemp(suffix=".gcode")
+        open(p, "w").write(g)
+        got = GV.read(p)
+        start = got["machine"]["start"]
+        self.assertEqual(start["tools"], [0])
+        self.assertEqual(start["machineCodes"], ["T1000"])
+        self.assertEqual(got["machine"]["end"].get("machineCodes"), ["T65535"])

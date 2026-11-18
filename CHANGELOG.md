@@ -8,6 +8,8 @@ All notable changes to Agent Link for OrcaSlicer. The format follows
 
 ### Fixed
 
+- Live 92: gcode_read's machineGcode lists only filament tools; Bambu
+  firmware codes (T255, T1000, T1001, T65279, T65535) go in `machineCodes`.
 - Live 91: a new project with a printer and no process or filament takes the
   printer's own default presets (`default_print_profile`,
   `default_filament_profile`) and says so in `defaulted`. With no default, the

@@ -48,6 +48,9 @@ _HEADER = {
     "cost": (r";\s*(?:total )?filament cost\s*=\s*([\d.,\s]+)",),
 }
 PAUSES = ("M601", "M0", "M1", "M25", "M400 U1")
+# T numbers at or above this are printer firmware codes, not filament tools.
+MACHINE_TOOL_CODES = 255
+
 COLOR_CHANGES = ("M600",)
 
 
@@ -310,7 +313,14 @@ def read(path, keep_paths=None, filament_diameter=1.75):
         m["filamentMm"] = round(m["filamentMm"], 1)
         m["timeS"] = round(m["timeS"], 1)
         m["temperature"] = sorted(m["temperature"])
-        m["tools"] = sorted(m["tools"])
+        # Bambu firmware takes T255 (unload), T1000/T1001 (its own nozzle
+        # calls) and T65279/T65535 (reset) in its start and end G-code: they
+        # are machine codes, not filament tools (live 18 Nov, 92).
+        tools = sorted(m["tools"])
+        m["tools"] = [t for t in tools if t < MACHINE_TOOL_CODES]
+        codes = [t for t in tools if t >= MACHINE_TOOL_CODES]
+        if codes:
+            m["machineCodes"] = [f"T{t}" for t in codes]
     return {"header": header, "layers": layers, "path": path, "machine": machine}
 
 
