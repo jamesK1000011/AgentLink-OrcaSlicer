@@ -143,6 +143,12 @@ class Geo:
     emboss = mesh = capper = None
 
 
+def cli_error(e, prefix=""):
+    """A slicer command-line error as a refusal: code busy when OrcaSlicer's
+    own window is open (or holds its lock), else failed."""
+    return ToolError("busy" if isinstance(e, slicers.SlicerBusy) else "failed", prefix + str(e))
+
+
 def tools(out_dir=None, geo=None, guide=None):
     """The OrcaSlicer tools. out_dir: where relative paths go (a function
     returning it, or a path). geo: a Geo; guide: the guide_read hint."""
@@ -564,7 +570,10 @@ def tools(out_dir=None, geo=None, guide=None):
             out = proj.fill_bed(a["object"], float(a.get("spacing", 5)))
             if a.get("arrange", True) and slicers.find("orcaslicer"):
                 proj.save()
-                slicers.relayout("orcaslicer", proj.path, arrange=True)
+                try:
+                    slicers.relayout("orcaslicer", proj.path, arrange=True)
+                except RuntimeError as e:
+                    raise cli_error(e, "fill_bed placed the copies, saved, but OrcaSlicer could not arrange them: ")
                 proj.__init__(proj.path)
             return out
         if action == "grid":
@@ -703,6 +712,8 @@ def tools(out_dir=None, geo=None, guide=None):
                 d = tempfile.mkdtemp()
                 try:
                     made = slicers.export_project("orcaslicer", f, d, "stls")
+                except slicers.SlicerBusy as e:
+                    raise cli_error(e)
                 except (FileNotFoundError, RuntimeError) as e:
                     raise ToolError("failed", f"{os.path.basename(f)} could not be read: {e}")
                 for m_ in made:
@@ -910,7 +921,7 @@ def tools(out_dir=None, geo=None, guide=None):
         except FileNotFoundError as e:
             raise ToolError("unavailable", f"{e} {action} is OrcaSlicer's own: install it or set AGENTLINK_ORCASLICER to its executable (orca_status says what is found); place and lay_flat move objects without it.")
         except RuntimeError as e:
-            raise ToolError("failed", str(e))
+            raise cli_error(e)
         fresh = O.Project(proj.path)
         return {"done": action, "objects": [{"name": x["name"], "placed": x.get("placed")} for x in fresh.info()["objects"]]}
 
@@ -998,7 +1009,7 @@ def tools(out_dir=None, geo=None, guide=None):
         except FileNotFoundError as e:
             raise ToolError("unavailable", str(e))
         except RuntimeError as e:
-            raise ToolError("failed", str(e))
+            raise cli_error(e)
         proj = O.Project(dest)
         objs = proj.objects()
         # The command line leaves every new project on Cool Plate, which PETG,
@@ -1335,7 +1346,7 @@ def tools(out_dir=None, geo=None, guide=None):
         try:
             slicers.make_project("orcaslicer", [model], dest, settings, profiles, {"arrange": True})
         except RuntimeError as e:
-            raise ToolError("failed", str(e))
+            raise cli_error(e)
         proj = O.Project(dest)
         skipped = []
         try:
@@ -1462,6 +1473,8 @@ def tools(out_dir=None, geo=None, guide=None):
             return {"export": what, "files": made}
         except FileNotFoundError as e:
             raise ToolError("unavailable", str(e))
+        except slicers.SlicerBusy as e:
+            raise cli_error(e)
         except (RuntimeError, ValueError) as e:
             raise ToolError("failed", str(e) + bed_hint(p, a, str(e)))
 
@@ -1582,7 +1595,7 @@ def tools(out_dir=None, geo=None, guide=None):
         ),
         Tool(
             "orca_slice",
-            "Slice an OrcaSlicer project file (.3mf) as it stands with OrcaSlicer's own command line, or export from it. Inputs: path (relative: the output folder); plate (0 or left out: all plates; else the plate's number from 1); export (gcode when left out). export gcode needs OrcaSlicer installed (orca_status). It writes the G-code into <project>-out/ and, unless keep is false, the sliced project <project>-sliced.3mf beside the project; the project itself is not changed. The reply: gcode (the files' paths), layers, filamentG, filamentMm, time, warnings (OrcaSlicer's own, from its result.json: always there, [] when it said none, null when it wrote no result.json), statistics (time, weight, cost, by feature and by object, when this build writes them), sliced, customGcode and gcodeWarning (G-code in the project that changes the printer: show the person), textures or warning (texture displacement painted with orca_paint is baked into the parts first only by a build with --bake-texture-displacement; another build slices it flat and the warning says so), postProcessed (a calibration's retraction steps written into the loose .gcode), next, orcaMs (how long OrcaSlicer's command line ran, ms; ms is the whole call, the run included). options for the slice: timelapse, allow_mix_temp, allow_multicolor_oneplate, no_check, skip_modified_gcodes, load_defaultfila, allow_newer_file (each true), skip_objects \"3,5\", mtcpp, mstpp, clone_objects, load_filament_ids; any other name is refused. Time: slicing takes as long as OrcaSlicer takes, from seconds for a small part to many minutes for a full plate (15 minutes allowed), and this server answers no other call meanwhile. If the client gives up waiting, the slice still finishes: read the result with gcode_read { path: \"<project>-sliced.3mf\" } rather than slicing again. A slice OrcaSlicer refuses answers failed with its own words; when it is a bed type a filament does not go on (\"Cool Plate does not support filament 1\"), the refusal names the bed types that would work and the orca_project set call that changes it. Other exports go to <project>-out/ (name: a file name there, no folders): drc (all objects, one Draco file), drcs (one each), svg (solid slices, one group a layer; layerHeight 0.01 to 10 mm, the project's when left out), amf (every plate; plate is not used), obj: these five are written here and need no OrcaSlicer. stl (all objects in one), stls (one each), settings (the project's settings as JSON), slicedata, 3mf (the project saved again by OrcaSlicer), and OrcaSlicer's own reports inspect_mesh, inspect_paint (only in builds that have them) and info: these run OrcaSlicer (5 to 10 minutes allowed). Their reply: export, files (or report). Starting a print is the person's call.",
+            "Slice an OrcaSlicer project file (.3mf) as it stands with OrcaSlicer's own command line, or export from it. Inputs: path (relative: the output folder); plate (0 or left out: all plates; else the plate's number from 1); export (gcode when left out). export gcode needs OrcaSlicer installed (orca_status). It writes the G-code into <project>-out/ and, unless keep is false, the sliced project <project>-sliced.3mf beside the project; the project itself is not changed. The reply: gcode (the files' paths), layers, filamentG, filamentMm, time, warnings (OrcaSlicer's own, from its result.json: always there, [] when it said none, null when it wrote no result.json), statistics (time, weight, cost, by feature and by object, when this build writes them), sliced, customGcode and gcodeWarning (G-code in the project that changes the printer: show the person), textures or warning (texture displacement painted with orca_paint is baked into the parts first only by a build with --bake-texture-displacement; another build slices it flat and the warning says so), postProcessed (a calibration's retraction steps written into the loose .gcode), next, orcaMs (how long OrcaSlicer's command line ran, ms; ms is the whole call, the run included). options for the slice: timelapse, allow_mix_temp, allow_multicolor_oneplate, no_check, skip_modified_gcodes, load_defaultfila, allow_newer_file (each true), skip_objects \"3,5\", mtcpp, mstpp, clone_objects, load_filament_ids; any other name is refused. Time: slicing takes as long as OrcaSlicer takes, from seconds for a small part to many minutes for a full plate (15 minutes allowed), and this server answers no other call meanwhile. If the client gives up waiting, the slice still finishes: read the result with gcode_read { path: \"<project>-sliced.3mf\" } rather than slicing again. When OrcaSlicer's own window is open and its command line cannot run beside it (or another copy holds its lock), the answer is busy, says so, and nothing is changed: ask the person to close the window when they are done there; never close it for them. A slice OrcaSlicer refuses answers failed with its own words; when it is a bed type a filament does not go on (\"Cool Plate does not support filament 1\"), the refusal names the bed types that would work and the orca_project set call that changes it. Other exports go to <project>-out/ (name: a file name there, no folders): drc (all objects, one Draco file), drcs (one each), svg (solid slices, one group a layer; layerHeight 0.01 to 10 mm, the project's when left out), amf (every plate; plate is not used), obj: these five are written here and need no OrcaSlicer. stl (all objects in one), stls (one each), settings (the project's settings as JSON), slicedata, 3mf (the project saved again by OrcaSlicer), and OrcaSlicer's own reports inspect_mesh, inspect_paint (only in builds that have them) and info: these run OrcaSlicer (5 to 10 minutes allowed). Their reply: export, files (or report). Starting a print is the person's call.",
             obj({"path": {"type": "string"}, "plate": {"type": "integer"}, "keep": {"type": "boolean"}, "export": {"type": "string", "enum": ["gcode", "stl", "stls", "obj", "amf", "svg", "drc", "drcs", "settings", "slicedata", "3mf", "inspect_mesh", "inspect_paint", "info"]}, "options": {"type": "object"}, "name": {"type": "string"}, "layerHeight": {"type": "number"}}, ["path"]),
             orca_slice,
         ),

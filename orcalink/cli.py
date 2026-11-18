@@ -44,11 +44,77 @@ def present():
     return {n: bool(find(n)) for n in NAMES}
 
 
+class SlicerBusy(RuntimeError):
+    """The slicer's command line could not run because the slicer's own
+    window is open (or another copy holds its lock). Nothing was changed."""
+
+
+# Words a slicer prints when another copy of it holds the lock.
+_LOCK = re.compile(r"another instance|already running|single.instance|lock file|could not (?:get|acquire|obtain) [^\n]*lock", re.I)
+# Command-line flags: a process with one of them is a command line, not a window.
+_CLI_FLAG = re.compile(r"^--(?:slice|export-|load-|info|inspect-|arrange|orient|outputdir|help)")
+
+
+def window_open(exe, ps_text=None):
+    """The process ids of the slicer's own window (exe started without
+    command-line flags) other than this process. ps_text: the output of
+    `ps -axo pid=,args=` (read here when None). [] when it cannot tell."""
+    if not exe:
+        return []
+    if ps_text is None:
+        try:
+            ps_text = subprocess.run(["ps", "-axo", "pid=,args="], capture_output=True, text=True, timeout=10).stdout or ""
+        except (OSError, subprocess.SubprocessError):
+            return []
+    base = os.path.basename(exe).lower()
+    pids = []
+    for line in ps_text.splitlines():
+        parts = line.strip().split()
+        if len(parts) < 2 or not parts[0].isdigit() or int(parts[0]) == os.getpid():
+            continue
+        if os.path.basename(parts[1]).lower() != base:
+            continue
+        if any(_CLI_FLAG.match(x) for x in parts[2:]):
+            continue
+        pids.append(int(parts[0]))
+    return pids
+
+
+def _busy_message(exe, what):
+    name = os.path.basename(exe or "the slicer")
+    return (f"{name}'s own window is open on this computer, and its command line {what} beside it. Nothing was changed. "
+            f"Tell the person: save their work in {name}'s window and close it when they are done there, then ask again. "
+            f"Do not close it for them.")
+
+
 def _run(args, timeout, cwd=None):
-    run = subprocess.run(args, capture_output=True, text=True, timeout=timeout, cwd=cwd)
-    if run.returncode != 0 and not os.environ.get("DISPLAY") and shutil.which("xvfb-run"):
-        run = subprocess.run(["xvfb-run", "-a"] + args, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+    try:
+        run = subprocess.run(args, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+        if run.returncode != 0 and not os.environ.get("DISPLAY") and shutil.which("xvfb-run"):
+            run = subprocess.run(["xvfb-run", "-a"] + args, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+    except subprocess.TimeoutExpired:
+        if window_open(args[0]):
+            raise SlicerBusy(_busy_message(args[0], f"did not finish in {timeout} s"))
+        raise RuntimeError(f"The slicer did not finish in {timeout} s and was stopped.")
     return run
+
+
+def _failed(run, why=None):
+    """The error for a command line that made nothing: SlicerBusy, with the
+    slicer's own words after it, when its window is open or it names a
+    lock; else the slicer's own words."""
+    tail = (why + " — " if why else "") + _tail(run)
+    exe = run.args[0] if isinstance(run.args, (list, tuple)) and run.args else None
+    if exe and os.path.basename(exe) == "xvfb-run" and len(run.args) > 2:
+        exe = run.args[2]
+    text = (run.stderr or "") + "\n" + (run.stdout or "")
+    if window_open(exe):
+        return SlicerBusy(_busy_message(exe, "made nothing") + " The slicer said: " + tail)
+    if _LOCK.search(text):
+        name = os.path.basename(exe or "the slicer")
+        return SlicerBusy(f"Another copy of {name} holds its lock, so its command line made nothing. Nothing was changed. "
+                          f"Tell the person: close any {name} window when they are done there, then ask again. The slicer said: " + tail)
+    return RuntimeError(tail)
 
 
 def minimal_profiles(settings, folder):
@@ -95,7 +161,7 @@ def slice_with(name, stl, gcode, settings, profiles=None, timeout=900, options=N
         args = [exe, "--export-gcode", "--load", profiles["config"], "--output", gcode, stl]
         run = _run(args, timeout)
         if run.returncode != 0 or not os.path.exists(gcode):
-            raise RuntimeError(_tail(run))
+            raise _failed(run)
         return exe, "given"
     folder = os.path.dirname(gcode) or "."
     out_dir = os.path.join(folder, os.path.splitext(os.path.basename(gcode))[0] + f"-{name}")
@@ -152,7 +218,7 @@ def slice_with(name, stl, gcode, settings, profiles=None, timeout=900, options=N
                 found = [os.path.join(out_dir, "plate_1.gcode")]
     if not found:
         why = result_error(out_dir)
-        raise RuntimeError((why + " — " if why else "") + _tail(run))
+        raise _failed(run, why)
     shutil.copyfile(found[0], gcode)
     LAST.update(results(out_dir))
     return exe, used
@@ -201,7 +267,7 @@ def slice_project(name, threemf, out_dir, timeout=900, export=None, plate=0, opt
         shutil.move(os.path.join(out_dir, "sliced.3mf"), export)
     if not found:
         why = result_error(out_dir)
-        raise RuntimeError((why + " — " if why else "") + _tail(run))
+        raise _failed(run, why)
     LAST.update(results(out_dir))
     LAST["orcaMs"] = orca_ms
     return exe, found
@@ -242,7 +308,7 @@ def make_project(name, stls, dest, settings, profiles=None, options=None, timeou
             pr.save()
     if not os.path.isfile(made):
         why = result_error(out_dir)
-        raise RuntimeError((why + " — " if why else "") + _tail(run))
+        raise _failed(run, why)
     shutil.move(made, dest)
     return exe
 
@@ -281,7 +347,7 @@ def relayout(name, threemf, arrange=False, orient=False, options=None, timeout=6
     run = _run(args, timeout, cwd=out_dir)
     if not os.path.isfile(made):
         why = result_error(out_dir)
-        raise RuntimeError((why + " — " if why else "") + _tail(run))
+        raise _failed(run, why)
     shutil.move(made, threemf)
     return exe
 
@@ -298,6 +364,8 @@ def inspect(name, threemf, what="mesh", timeout=300):
         raise RuntimeError(f"This {name} has no {flag}.")
     run = _run([exe, flag, os.path.abspath(threemf)], timeout)
     text = run.stdout or ""
+    if run.returncode != 0 and not text.strip():
+        raise _failed(run)
     i = min([x for x in (text.find("{"), text.find("[")) if x >= 0] or [-1])
     if i >= 0:
         try:
@@ -332,7 +400,7 @@ def export_project(name, threemf, out_dir, what, filename=None, timeout=600):
     made = sorted(os.path.join(out_dir, n) for n in set(os.listdir(out_dir)) - before if n != "result.json")
     if not made:
         why = result_error(out_dir)
-        raise RuntimeError((why + " — " if why else "") + _tail(run))
+        raise _failed(run, why)
     return made
 
 

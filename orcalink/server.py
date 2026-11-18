@@ -35,6 +35,9 @@ def build(out_dir):
             from . import presets
 
             out["orcaVersion"] = presets.orca_version(exe)
+            # Its window open: the command line may not run beside it (slicing
+            # and the rest then answer busy, never an obscure failure).
+            out["windowOpen"] = bool(cli.window_open(exe))
         else:
             out["note"] = "OrcaSlicer not found: install it, or set AGENTLINK_ORCASLICER to its executable."
         return out
@@ -43,7 +46,7 @@ def build(out_dir):
     tools = T.tools(lambda: out_dir) + [
         Tool("guide_read", "The written guide to these tools. topic: orca (the only one here, and the default): the loop from project to slice to reading the G-code back, every orca_project action with its arguments, how bed types and filaments go together, and the traps. Read it once before the first orca_project call that is more than info or set. The reply: topic, text. An unknown topic is refused with the topics there are.",
              obj({"topic": {"type": "string", "description": "orca (the default)."}}), guide_read),
-        Tool("orca_status", "What this server has to work with; call it first. No inputs. The reply: version (this server's), commit (when started from the extension), out (the output folder, where every relative path goes and files are written), orcaslicer (the path of the OrcaSlicer executable found, or null), orcaVersion, bambustudio (its path or null), and note when OrcaSlicer is not found (install it, or set AGENTLINK_ORCASLICER to its executable). Without OrcaSlicer, orca_project still reads and changes projects, orca_paint paints, gcode_read reads and orca_slice exports drc, drcs, svg, amf and obj; making a project (new), slicing, arrange, orient, cli, the other exports and orca_calibrate need it. Changes nothing.",
+        Tool("orca_status", "What this server has to work with; call it first. No inputs. The reply: version (this server's), commit (when started from the extension), out (the output folder, where every relative path goes and files are written), orcaslicer (the path of the OrcaSlicer executable found, or null), orcaVersion, windowOpen (true when OrcaSlicer's own window is open on this computer), bambustudio (its path or null), and note when OrcaSlicer is not found (install it, or set AGENTLINK_ORCASLICER to its executable). Without OrcaSlicer, orca_project still reads and changes projects, orca_paint paints, gcode_read reads and orca_slice exports drc, drcs, svg, amf and obj; making a project (new), slicing, arrange, orient, cli, the other exports and orca_calibrate need it. If the command line cannot run because OrcaSlicer's window is open or holds its lock, those calls answer busy and change nothing: ask the person to close the window when they are done there. Changes nothing.",
              obj({}), orca_status),
     ]
     return Server("orcaslicer-agentlink", VERSION, tools, instructions=INSTRUCTIONS)

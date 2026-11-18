@@ -30,6 +30,7 @@ These tools are Agent Link for OrcaSlicer's (a separate add-on, github.com/james
 - A refused value changes nothing: the project is saved only after every value of the call has been checked.
 
 ## Traps
+- OrcaSlicer's own window open: when its command line cannot run beside it (or another copy holds its lock), the calls that run OrcaSlicer (new, arrange, orient, cli, orca_slice, orca_calibrate) answer `busy`, say so, and change nothing. `orca_status` gives `windowOpen`. Ask the person to close the window when they are done there; never close it for them.
 - Plates sit side by side in the project's world (a bed and a fifth apart): `place at` is on the object's own plate.
 - Calibrations (`orca_calibrate`) use the models of the OrcaSlicer on this computer; the retraction tower rewrites the sliced G-code, so slice it with `orca_slice`.
 - Starting a print is the person's call.

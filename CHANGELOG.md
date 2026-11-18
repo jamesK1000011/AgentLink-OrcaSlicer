@@ -8,6 +8,12 @@ All notable changes to Agent Link for OrcaSlicer. The format follows
 
 ### Fixed
 
+- With OrcaSlicer's own window open, a command line that could not run beside
+  it failed with the slicer's last lines only (or hung to the time limit). The
+  calls that run OrcaSlicer now answer `busy`: its window is open (or another
+  copy holds its lock), nothing was changed, ask the person to close it when
+  they are done there. A time limit reached says so. `orca_status` gives
+  `windowOpen`.
 - `orca_paint where` with a key that is not normal, within, box, below or above
   (say `{ face: "top" }`) painted every triangle of the part. It is refused now,
   with the keys there are; a normal or box of the wrong shape is refused too.

@@ -34,6 +34,7 @@ orcalink/tools.py
 orcalink_server.py
 tests/data/orca-two-boxes.json
 tests/data/texture-displacement-golden.json
+tests/test_busy.py
 tests/test_calibrate.py
 tests/test_draco.py
 tests/test_files.py
