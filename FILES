@@ -42,6 +42,7 @@ tests/test_freecad_bridge.py
 tests/test_gcode_view.py
 tests/test_meshgen.py
 tests/test_orca3mf.py
+tests/test_orca_sources.py
 tests/test_presets.py
 tests/test_printstrength.py
 tests/test_prusa.py
