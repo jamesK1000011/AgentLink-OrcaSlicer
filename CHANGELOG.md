@@ -6,6 +6,14 @@ All notable changes to Agent Link for OrcaSlicer. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Live 91: a new project with a printer and no process or filament takes the
+  printer's own default presets (`default_print_profile`,
+  `default_filament_profile`) and says so in `defaulted`. With no default, the
+  refusal names the printer's presets, not "None". A far-off preset name gets
+  hints by shared words.
+
 ### Added
 
 - New code without a restart of Claude (live 68; `orcalink/reload.py`). The

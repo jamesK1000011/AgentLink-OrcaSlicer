@@ -227,6 +227,8 @@ def resolve(index, kind, name, _seen=None, _near=None):
 
         near = difflib.get_close_matches(_norm(name), [_norm(n) for n in index[kind]], n=3, cutoff=0.6)
         names = [n for n in index[kind] if _norm(n) in near][:3]
+        if not names:
+            names = near_by_words(index, kind, name)
         raise PresetError(f"No {kind} preset named {name!r} in the preset folders read. Give the name as the slicer lists it."
                           + (f" Near names: {', '.join(names)}." if names else ""))
     with open(entry["path"], encoding="utf-8") as f:
@@ -320,9 +322,44 @@ def bundle(slicer, machine, process, filament, name=None):
     if not roots(slicer):
         raise PresetError(f"No {slicer} presets on this computer (looked in {', '.join(ROOTS[slicer][1][:3])}).")
     out = {"agentlinkPresets": 1, "slicer": slicer, "name": name or machine}
-    for kind, n in zip(KINDS, (machine, process, filament)):
+    if not machine:
+        raise PresetError("machine (a printer preset name) is needed to make presets: give the printer as the slicer lists it.")
+    out["machine"] = resolve(index, "machine", machine)
+    defaults = {"process": out["machine"].get("default_print_profile"), "filament": out["machine"].get("default_filament_profile")}
+    for kind, n in (("process", process), ("filament", filament)):
+        if not n:
+            n = defaults[kind]
+            if isinstance(n, list):
+                n = n[0] if n else None
+            if not n:
+                raise PresetError(f"No {kind} preset given, and the printer {machine!r} names no default {kind}: give {kind} as the slicer lists it."
+                                  + _hint(index, kind, machine))
+            out.setdefault("defaulted", {})[kind] = n
         out[kind] = resolve(index, kind, n)
     return out
+
+
+def near_by_words(index, kind, name, n=3):
+    """Presets that share the most words with name (the printer after @,
+    the material): a hint when the spelling is far off."""
+    want = set(_norm(name).replace("@", " ").split())
+    if not want:
+        return []
+    scored = []
+    for k, entries in index[kind].items():
+        if not entries[0].get("listed", True):
+            continue
+        got = set(_norm(k).replace("@", " ").split())
+        common = len(want & got)
+        if common:
+            scored.append((-common, k))
+    scored.sort()
+    return [k for _, k in scored[:n]]
+
+
+def _hint(index, kind, machine):
+    names = near_by_words(index, kind, machine)
+    return f" Presets for that printer: {', '.join(names)}." if names else ""
 
 
 def check_bundle(data):

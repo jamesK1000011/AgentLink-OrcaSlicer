@@ -96,7 +96,7 @@ def geo_for(session, base):
             chosen = setup.get("slicerPresets")
             profiles = {}
             if chosen:
-                data = SP.load_saved(s.out_dir, chosen["bundle"]) if chosen.get("bundle") else SP.bundle(chosen.get("slicer", "orcaslicer"), chosen["machine"], chosen["process"], chosen["filament"])
+                data = SP.load_saved(s.out_dir, chosen["bundle"]) if chosen.get("bundle") else SP.bundle(chosen.get("slicer", "orcaslicer"), chosen["machine"], chosen.get("process"), chosen.get("filament"))
                 profiles = SP.write_profiles(data, os.path.join(work, "presets"))
             return settings, profiles
 

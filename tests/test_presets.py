@@ -59,6 +59,30 @@ class Presets(unittest.TestCase):
         self.assertEqual(b["machine"]["gcode_flavor"], "marlin")
         self.assertEqual(SP.setup_from(b), {"layerHeight": 0.12, "walls": 3, "infill": 15.0, "topLayers": 5, "bottomLayers": 3, "nozzle": 0.4})
 
+    def test_bundle_takes_the_printers_defaults(self):
+        # Live 18 Nov (91): a printer with no process answered "No process preset named None".
+        m = os.path.join(os.environ["AGENTLINK_BAMBU_PRESETS"].split(os.pathsep)[1], "BBL/machine/Bambu Lab H2D 0.4 nozzle.json")
+        with open(m) as f:
+            d = json.load(f)
+        d.update({"default_print_profile": "0.20mm Standard @BBL H2D", "default_filament_profile": ["Bambu PLA Basic @BBL H2D"]})
+        with open(m, "w") as f:
+            json.dump(d, f)
+        b = SP.bundle("bambustudio", "Bambu Lab H2D 0.4 nozzle", None, None)
+        self.assertEqual(b["process"]["layer_height"], "0.2")
+        self.assertEqual(b["defaulted"], {"process": "0.20mm Standard @BBL H2D", "filament": "Bambu PLA Basic @BBL H2D"})
+
+    def test_no_default_names_the_printers_presets(self):
+        with self.assertRaises(SP.PresetError) as c:
+            SP.bundle("bambustudio", "Bambu Lab H2D 0.4 nozzle", None, "Bambu PLA Basic @BBL H2D")
+        self.assertIn("No process preset given", str(c.exception))
+        self.assertNotIn("None", str(c.exception))
+        self.assertIn("0.20mm Standard @BBL H2D", str(c.exception))
+
+    def test_far_name_gets_word_hints(self):
+        with self.assertRaises(SP.PresetError) as c:
+            SP.resolve(SP.scan("bambustudio"), "filament", "Prusament PLA @BBL H2D")
+        self.assertIn("Near names: Bambu PLA Basic @BBL H2D", str(c.exception))
+
     def test_profiles_name_the_printer(self):
         b = SP.bundle("bambustudio", "Bambu Lab H2D 0.4 nozzle", "My fine PLA", "My PLA")
         paths = SP.write_profiles(b, os.path.join(self.tmp, "w"))
