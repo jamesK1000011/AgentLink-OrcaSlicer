@@ -16,7 +16,7 @@
 - Filaments and presets: filament { slot | like, color, type, settings | remove }, flush { matrix, multiplier }, presets { machine, process, filament | bundle }.
 - Plates: plate { object, plate } (moves it; the next number makes a plate), plate_add, plate_remove, plate_duplicate, plate_move { plate, to }, set { scope: plate, key: name|locked|bed_type|print_sequence … }. A plate's bed_type is written as OrcaSlicer saves it (the plate's own bed_type) and as the project's curr_bed_type, which the command line slices with; the other plates are given their own first so they keep theirs. It is read back from the saved file; if it did not take, set answers with an error, never a success. bed_type "" takes the plate's own away.
 - Bed type and filaments: each filament has a bed temperature per bed type (cool_plate_temp, eng_plate_temp, hot_plate_temp, textured_plate_temp, textured_cool_plate_temp, supertack_plate_temp); 0 means it does not go on that plate and the slice stops ("Cool Plate does not support filament 1"). orca_slice then names the bed types that would work.
-- OrcaSlicer's own: arrange, orient (options allow_rotations, align_to_y_axis …), cli { options } (uptodate, repair, clone_objects, repetitions, scale, rotate, ground_face_normal …).
+- OrcaSlicer's own: arrange, orient (options allow_rotations, align_to_y_axis …), cli { options } (uptodate, repair, clone_objects, repetitions, scale, rotate, ground_face_normal …). arrange works on one plate at a time: each object stays on its plate. A locked plate is not arranged. An object that does not fit goes to a new plate, and `overflow` names it.
 - info { object } (with its effective print settings), saveAs writes a copy.
 
 ## Numbering, limits and time

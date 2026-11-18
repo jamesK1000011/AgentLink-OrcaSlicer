@@ -509,9 +509,31 @@ def nozzle_volume_types(machine_path):
     return [(given[i] if i < len(given) else (given[-1] if given else "Standard")) for i in range(n)]
 
 
+_ERRLINE = re.compile(r"\[(error|fatal)\]|found error|conflicts? found|error:", re.I)
+
+
+def own_errors(text, most=5):
+    """The slicer's own error lines in its output, in order, each once: the
+    log prefix (time, thread, level) cut off. The last lines alone can hide
+    them ("run found error" with the cause some lines up)."""
+    out = []
+    for line in (text or "").splitlines():
+        if not _ERRLINE.search(line):
+            continue
+        msg = re.sub(r"^(\s*\[[^\]]*\])+\s*", "", line).strip()
+        msg = msg[:300]
+        if msg and msg not in out:
+            out.append(msg)
+    return out[:most]
+
+
 def _tail(run):
-    lines = ((run.stderr or "") + "\n" + (run.stdout or "")).strip().splitlines()
+    text = (run.stderr or "") + "\n" + (run.stdout or "")
+    lines = text.strip().splitlines()
     tail = [l for l in lines if l.strip()][-3:]
+    errs = [e for e in own_errors(text) if not any(e in t for t in tail)]
+    if errs:
+        tail = errs + tail
     # Which build stopped matters: the slicers' command lines change a lot
     # between releases (Bambu Studio's for two-nozzle printers above all).
     version = next((l.split("]")[-1].strip() for l in lines if re.search(r"version", l, re.I) and re.search(r"\d+\.\d+\.\d+", l)), None)

@@ -8,6 +8,19 @@ All notable changes to Agent Link for OrcaSlicer. The format follows
 
 ### Fixed
 
+- Presets: OrcaSlicer reads its own folders, then Bambu Studio's (the person's
+  own presets listed, Bambu Studio's system presets read only to resolve what
+  a preset inherits). A preset listed is a preset orca_project takes. A name
+  can differ in case and spacing; a nameless user file is found by its file
+  name. An unknown name gives near names. A preset given by path in profiles
+  is flattened (inherits merged in, no empty list).
+- orca_project presets looks up only the kinds given; the project's other
+  presets stay.
+- A failed slice puts OrcaSlicer's own error lines (such as "gcode path
+  conflicts found between …") in the answer, before the last lines.
+- arrange works one plate at a time (the other plates locked for each run,
+  the locks put back after), so an object moved to plate 2 stays there. A
+  locked plate is not arranged. overflow names an object that did not fit.
 - With OrcaSlicer's own window open, a command line that could not run beside
   it failed with the slicer's last lines only (or hung to the time limit). The
   calls that run OrcaSlicer now answer `busy`: its window is open (or another

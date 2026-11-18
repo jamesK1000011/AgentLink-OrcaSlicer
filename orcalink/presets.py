@@ -43,14 +43,34 @@ class PresetError(Exception):
     pass
 
 
-def roots(slicer):
+def _own_roots(slicer):
     env, places = ROOTS[slicer]
     given = [p for e in env for p in (os.environ.get(e) or "").split(os.pathsep) if p]
-    found = [p for p in (given or places) if os.path.isdir(p)]
+    return [p for p in (given or places) if os.path.isdir(p)]
+
+
+def roots(slicer):
+    """The folders read for a slicer's presets, in the order a name is
+    looked up. OrcaSlicer: its own folders, the system presets fetched as
+    JSON (fetch_orca), then Bambu Studio's folders last. OrcaSlicer takes
+    Bambu Studio's presets (same format), and the person's own filament
+    presets are often kept in Bambu Studio only: so slicer_presets list and
+    orca_project read the same names."""
+    found = _own_roots(slicer)
     if slicer == "orcaslicer":
-        # The system presets fetched as JSON (fetch_orca), after the person's own.
         found += [p for p in orca_cached() if p not in found]
+        found += [p for p in _own_roots("bambustudio") if p not in found]
     return found
+
+
+def _is_user(root):
+    return os.sep + "user" in root
+
+
+def _foreign_system(slicer, root):
+    """A root of another slicer's system presets: read to resolve what a
+    preset inherits, not listed (OrcaSlicer's own system presets are)."""
+    return slicer == "orcaslicer" and root in _own_roots("bambustudio") and not _is_user(root)
 
 
 def _kind_of(path, data):
@@ -70,28 +90,68 @@ def scan(slicer):
     same name in several places is kept in the order of roots (the person's
     own first)."""
     index = {k: {} for k in KINDS}
-    for root in roots(slicer):
-        user = os.sep + "user" in root
+    every = roots(slicer)
+    # Another slicer's system presets are read only when a name is not
+    # found in the rest (find_name): a few thousand files, seldom needed.
+    index["_later"] = [r for r in every if _foreign_system(slicer, r)]
+    index["_slicer"] = slicer
+    _read(index, slicer, [r for r in every if r not in index["_later"]])
+    return index
+
+
+def _read(index, slicer, folders):
+    for root in folders:
+        user = _is_user(root)
+        foreign = _foreign_system(slicer, root)
         for path in sorted(glob.glob(os.path.join(root, "**", "*.json"), recursive=True)):
             try:
                 with open(path, encoding="utf-8") as f:
                     data = json.load(f)
             except Exception:
                 continue
-            if not isinstance(data, dict) or "name" not in data:
+            if not isinstance(data, dict):
                 continue
+            if not data.get("name"):
+                if not user:
+                    continue
+                # A preset of the person's own may keep its name only in
+                # the file name (the .info file beside it has the rest).
+                data["name"] = os.path.splitext(os.path.basename(path))[0]
             kind = _kind_of(path, data)
             if kind is None:
                 continue
-            listed = str(data.get("instantiation", "true")).lower() != "false"
+            listed = str(data.get("instantiation", "true")).lower() != "false" and not foreign
             # The vendor folder (BBL, Creality …) a system preset sits in:
             # base names such as fdm_machine_common are in every vendor's
             # folder, with different values, and the slicer looks a parent
             # up in the child's own vendor first.
             rel = os.path.relpath(path, root).split(os.sep)
             vendor = rel[0] if len(rel) >= 3 else None
-            index[kind].setdefault(data["name"], []).append({"path": path, "root": root, "user": user, "listed": listed, "vendor": vendor})
-    return index
+            index[kind].setdefault(data["name"], []).append({"path": path, "root": root, "user": user, "listed": listed, "vendor": vendor,
+                                                             "name": data["name"]})
+
+
+def _norm(name):
+    return " ".join(str(name or "").replace("\u00a0", " ").split()).casefold()
+
+
+def find_name(index, kind, name):
+    """The preset name as the files have it: the name itself, else the
+    same words in any case and spacing, else a file named so (a preset of
+    the person's own is often given as its file shows it). None when not
+    found."""
+    if name in index[kind]:
+        return name
+    later = index.pop("_later", None)
+    if later:
+        _read(index, index.get("_slicer"), later)
+        if name in index[kind]:
+            return name
+    want = _norm(name)
+    for n, entries in index[kind].items():
+        if _norm(n) == want or any(_norm(os.path.splitext(os.path.basename(e["path"]))[0]) == want for e in entries):
+            return n
+    return None
 
 
 def listing(slicer, kind=None, query=None, limit=60):
@@ -99,6 +159,7 @@ def listing(slicer, kind=None, query=None, limit=60):
     the person's own marked, filtered by words in query."""
     index = scan(slicer)
     words = [w.lower() for w in (query or "").split()]
+    bambu = set(_own_roots("bambustudio")) if slicer == "orcaslicer" else set()
     out = {}
     for k in ([kind] if kind else KINDS):
         names = []
@@ -106,7 +167,8 @@ def listing(slicer, kind=None, query=None, limit=60):
             if not entries[0]["listed"]:
                 continue
             if all(w in name.lower() for w in words):
-                names.append({"name": name, **({"own": True} if entries[0]["user"] else {})})
+                names.append({"name": name, **({"own": True} if entries[0]["user"] else {}),
+                              **({"in": "Bambu Studio"} if entries[0]["root"] in bambu else {})})
         names.sort(key=lambda x: (not x.get("own"), x["name"]))
         out[k] = {"count": len(names), "presets": names[:limit]}
     return out
@@ -154,13 +216,19 @@ def resolve(index, kind, name, _seen=None, _near=None):
     include that is not there stops it: left out, a printer would take a
     generic start G-code."""
     seen = _seen or []
+    name = find_name(index, kind, name) or name
     if name in seen:
         raise PresetError(f"{kind} preset {name!r} inherits from itself ({' > '.join(seen + [name])}).")
     entry = _entry(index, kind, name, _near)
     if entry is None:
         if seen:
             raise PresetError(f"{kind} preset {seen[-1]!r} inherits or includes {name!r}, which is not among the presets read: fetch that vendor's presets again (or the person's slicer lacks it).")
-        raise PresetError(f"No {kind} preset named {name!r}: slicer_presets list (or the slicer's own presets list) shows those there are — machine, process and filament names, exactly.")
+        import difflib
+
+        near = difflib.get_close_matches(_norm(name), [_norm(n) for n in index[kind]], n=3, cutoff=0.6)
+        names = [n for n in index[kind] if _norm(n) in near][:3]
+        raise PresetError(f"No {kind} preset named {name!r} in the preset folders read. Give the name as the slicer lists it."
+                          + (f" Near names: {', '.join(names)}." if names else ""))
     with open(entry["path"], encoding="utf-8") as f:
         data = json.load(f)
     parent = data.get("inherits")
@@ -219,6 +287,32 @@ def complete(kind, data):
     Assigning from an empty vector"); left out, the slicer's own default
     stands instead, as in its window."""
     return {k: v for k, v in data.items() if not (isinstance(v, list) and not v)}
+
+
+def flatten_file(slicer, kind, path, folder_):
+    """A preset file given by path made ready for the command line: what it
+    inherits merged in (looked up among the slicer's presets) and no empty
+    list. The command line stops on a user preset file as the slicer saves
+    it ("Assigning from an empty vector"). Returns the path to load: the
+    file itself when it needs nothing, else a flat copy in folder_."""
+    with open(os.path.expanduser(path), encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise PresetError(f"{path}: not a preset (a JSON object).")
+    empty = any(isinstance(v, list) and not v for v in data.values())
+    if not data.get("inherits") and not empty:
+        return path
+    flat = {}
+    if data.get("inherits"):
+        flat = resolve(scan(slicer), kind, data["inherits"])
+        flat.pop("_system", None)
+    flat = complete(kind, merge(kind, flat, {k: v for k, v in data.items() if k != "inherits"}))
+    flat["type"] = kind
+    os.makedirs(folder_, exist_ok=True)
+    out = os.path.join(folder_, f"agentlink-given-{kind}.json")
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(flat, f, indent=1)
+    return out
 
 
 def bundle(slicer, machine, process, filament, name=None):
