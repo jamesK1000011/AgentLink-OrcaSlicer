@@ -6,6 +6,14 @@ All notable changes to Agent Link for OrcaSlicer. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Add-ons by convention (orcalink/addons.py): a package on the path, or in
+  a folder that ORCALINK_ADDONS lists, that holds an orcalink_addon module
+  adds its tools to this server. The server names no add-on. With none
+  installed, nothing is added and no tokens are spent. orca_status lists the
+  add-ons loaded (addons) and left out (addonsSkipped).
+
 ### Fixed
 
 - gcode_read counts Bambu wipes: OrcaSlicer writes "; WIPE_START" and

@@ -34,6 +34,12 @@ def build(out_dir):
         if os.environ.get("ORCALINK_RELOADED_FROM"):
             # Started again in place on newer code, without a restart of Claude.
             out["reloadedFrom"] = os.environ["ORCALINK_RELOADED_FROM"][:7]
+        from . import addons
+
+        if addons.LOADED:
+            out["addons"] = [{k: v for k, v in a.items() if v is not None} for a in addons.LOADED]
+        if addons.SKIPPED:
+            out["addonsSkipped"] = addons.SKIPPED
         if exe:
             from . import presets
 
@@ -52,6 +58,11 @@ def build(out_dir):
         Tool("orca_status", "What this server has to work with; call it first. No inputs. The reply: version (this server's), commit (when started from the extension), reloadedFrom (the commit before, when the server loaded newer code between two calls), out (the output folder, where every relative path goes and files are written), orcaslicer (the path of the OrcaSlicer executable found, or null), orcaVersion, windowOpen (true when OrcaSlicer's own window is open on this computer), bambustudio (its path or null), and note when OrcaSlicer is not found (install it, or set AGENTLINK_ORCASLICER to its executable). Without OrcaSlicer, orca_project still reads and changes projects, orca_paint paints, gcode_read reads and orca_slice exports drc, drcs, svg, amf and obj; making a project (new), slicing, arrange, orient, cli, the other exports and orca_calibrate need it. If the command line cannot run because OrcaSlicer's window is open or holds its lock, those calls answer busy and change nothing: ask the person to close the window when they are done there. Changes nothing.",
              obj({}), orca_status),
     ]
+    # Add-ons found by convention (orcalink/addons.py): none installed, none
+    # added, no tokens spent.
+    from . import addons
+
+    tools += addons.tools(out_dir, {t.name: t.fn for t in tools})
     return Server("orcaslicer-agentlink", VERSION, tools, instructions=INSTRUCTIONS)
 
 

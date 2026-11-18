@@ -12,6 +12,7 @@ mcpb/manifest.json
 mcpb/server/index.js
 mcpb/test/launcher.test.mjs
 orcalink/__init__.py
+orcalink/addons.py
 orcalink/agentlink_families.py
 orcalink/calibrate.py
 orcalink/cli.py
@@ -35,6 +36,7 @@ orcalink/tools.py
 orcalink_server.py
 tests/data/orca-two-boxes.json
 tests/data/texture-displacement-golden.json
+tests/test_addons.py
 tests/test_busy.py
 tests/test_calibrate.py
 tests/test_draco.py
