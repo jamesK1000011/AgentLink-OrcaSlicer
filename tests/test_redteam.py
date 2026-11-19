@@ -84,6 +84,13 @@ class RedTeam(unittest.TestCase):
 
     def test_writes_stay_sensible(self):
         self.assertIn("folders", self.refused("orca_slice", {"path": "p.3mf", "export": "obj", "name": "../../evil.obj"}))
+
+    # R2-15: no tool writes into the app copy, where add-ons load from.
+    def test_no_write_into_the_app_copy(self):
+        from orcalink import addons
+        dest = os.path.join(addons.APP_ROOT, "zz-redteam.3mf")
+        self.assertIn("own folder", self.refused("orca_project", {"action": "set", "path": "p.3mf", "key": "wall_loops", "value": 3, "saveAs": dest}))
+        self.assertFalse(os.path.exists(dest))
         self.refused("orca_project", {"action": "set", "path": "p.3mf", "key": "wall_loops", "value": 3, "saveAs": ".zshrc.3mf"})
         self.refused("orca_project", {"action": "set", "path": "p.3mf", "key": "wall_loops", "value": 3, "saveAs": "x.txt"})
         self.assertIn("overwrite", self.refused("orca_project", {"action": "set", "path": "p.3mf", "key": "wall_loops", "value": 3, "saveAs": "p.3mf"}))

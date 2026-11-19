@@ -150,6 +150,32 @@ class Addons(unittest.TestCase):
                     with open(os.path.join(root, n), encoding="utf-8") as f:
                         self.assertNotIn("printloop", f.read().lower(), n)
 
+    # R2-15: only ORCALINK_ADDONS and the app copy's addons folder load.
+    def test_the_python_path_is_never_searched(self):
+        pkg = os.path.join(self.d, "zzaddon")
+        os.makedirs(pkg)
+        open(os.path.join(pkg, "__init__.py"), "w").close()
+        with open(os.path.join(pkg, "orcalink_addon.py"), "w") as f:
+            f.write(ADDON)
+        os.environ.pop("ORCALINK_ADDONS", None)
+        sys.path.append(self.d)  # as site-packages or PYTHONPATH would
+        self.assertNotIn("zzaddon.orcalink_addon", addons.found())
+        self.assertNotIn("zz_hello", self.names(build(self.out)))
+
+    def test_an_addon_may_not_take_a_server_group(self):
+        pkg = os.path.join(self.d, "zzaddon")
+        os.makedirs(pkg)
+        open(os.path.join(pkg, "__init__.py"), "w").close()
+        with open(os.path.join(pkg, "orcalink_addon.py"), "w") as f:
+            f.write(ADDON.replace('"fn": hello},', '"fn": hello, "group": "core"},', 1))
+        os.environ["ORCALINK_ADDONS"] = self.d
+        self.assertNotIn("zz_hello", self.names(build(self.out)))
+        self.assertTrue(any("group" in s.get("why", "") for s in addons.SKIPPED))
+
+    def test_the_app_copy_is_known(self):
+        self.assertTrue(addons.inside_app(os.path.join(addons.APP_ADDONS, "x", "y.py")))
+        self.assertFalse(addons.inside_app(self.out))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -211,6 +211,14 @@ def tools(out_dir=None, geo=None, guide=None):
             g.body(None)
         return g.tris(body, tol)
 
+    def no_app(p):
+        """A file a tool writes: never in this app copy (its code and add-ons)."""
+        from . import addons as _addons
+
+        if _addons.inside_app(p):
+            raise ToolError("invalid_input", f"{os.path.basename(p)}: not in this server's own folder; write in the output folder.")
+        return p
+
     def path_of(a, must=True):
         p = a.get("path")
         if not p:
@@ -218,6 +226,8 @@ def tools(out_dir=None, geo=None, guide=None):
         p = os.path.expanduser(p)
         if not os.path.isabs(p):
             p = os.path.join(s.out_dir, p)
+        if not must:
+            no_app(p)
         if must and not os.path.isfile(p):
             raise ToolError("not_found", f"{p}: no such file (a relative path is in the output folder; orca_project new {{ files, path }} makes a project).")
         return p
@@ -375,6 +385,7 @@ def tools(out_dir=None, geo=None, guide=None):
         """A file a tool writes at a path it was given: with the right
         extension, not hidden, not through a link, and not over a file
         unless overwrite is true."""
+        no_app(p)
         if not p.lower().endswith(ext):
             raise ToolError("invalid_input", f"{os.path.basename(p)}: a {ext} file.")
         if os.path.basename(p).startswith("."):
@@ -445,7 +456,7 @@ def tools(out_dir=None, geo=None, guide=None):
         except O.ProjectError as e:
             raise ToolError("invalid_input", str(e))
         if proj.changed:
-            dest = safe_dest(path_of({"path": a["saveAs"]}, must=False), ".3mf", a) if a.get("saveAs") else proj.path
+            dest = safe_dest(path_of({"path": a["saveAs"]}, must=False), ".3mf", a) if a.get("saveAs") else no_app(proj.path)
             proj.save(dest)
             out = {**out, "saved": dest, "next": "orca_slice { path } slices it as it now stands."}
             if action == "set":
@@ -1492,6 +1503,7 @@ def tools(out_dir=None, geo=None, guide=None):
         if what not in ("drc", "drcs", "svg", "amf", "obj") and not slicers.find("orcaslicer"):
             raise ToolError("unavailable", "OrcaSlicer is not on this computer (AGENTLINK_ORCASLICER sets its path); drc, drcs, svg, amf and obj export without it.")
         out_dir = os.path.splitext(p)[0] + "-out"
+        no_app(out_dir)
         try:
             if what == "gcode":
                 plate = int(a.get("plate", 0))

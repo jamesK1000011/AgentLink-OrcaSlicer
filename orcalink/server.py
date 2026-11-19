@@ -62,7 +62,7 @@ def build(out_dir):
     # added, no tokens spent.
     from . import addons
 
-    tools += addons.tools(out_dir, {t.name: t.fn for t in tools})
+    tools += addons.tools(out_dir, {t.name: t.fn for t in tools}, {t.group for t in tools})
     return Server("orcaslicer-agentlink", VERSION, tools, instructions=INSTRUCTIONS)
 
 

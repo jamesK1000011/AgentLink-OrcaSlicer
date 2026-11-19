@@ -2,16 +2,17 @@
 """Add-ons for this server, found by convention and never named here.
 
 An add-on is a package that holds a module orcalink_addon.py. The server
-looks for it in these places, in this order:
+looks for it only in these places, in this order:
 - each folder that the ORCALINK_ADDONS variable lists (separated as PATH is);
 - each child folder of the "addons" folder of this app copy (APP_ADDONS:
   the folder beside the orcalink package). Each child is a repository root
   that holds a package. FreeCAD Agent Link's launcher puts the pinned
-  add-ons there at agentlink_update (packaging/addons.json, serverAddons);
-- the Python path.
-The server never searches the user's writable folders (such as ~/AgentLink)
-by default: an add-on folder that the agent can write would let it run code
-without the person's OK. That module has tools(ctx): a list of tools as dicts
+  add-ons there at agentlink_update (packaging/addons.json, serverAddons).
+The server does not search the Python path (site-packages, the user site
+folder, PYTHONPATH): a package there is not pinned and has no OK. It never
+searches the user's writable folders (such as ~/AgentLink): an add-on folder
+that the agent can write would let it run code without the person's OK.
+No tool of this server writes into the app copy (inside_app). That module has tools(ctx): a list of tools as dicts
 {name, description, inputSchema, fn, changes?, group?}. ctx gives
 out_dir, tools (this server's own tool functions by name), ToolError and
 api (1). The module may also give VERSION, LICENSE and CREDIT, which
@@ -37,7 +38,16 @@ SKIPPED = []
 
 # The add-ons of this app copy: <app>/addons/<repository>/<package>. Found
 # from this module's own place, never from a user folder.
-APP_ADDONS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "addons")
+APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+APP_ADDONS = os.path.join(APP_ROOT, "addons")
+
+
+def inside_app(path, root=None):
+    """True when path (links followed) is in this app copy: its code and its
+    add-ons. No tool writes there."""
+    root = os.path.realpath(APP_ROOT if root is None else root)
+    p = os.path.realpath(os.path.expanduser(str(path)))
+    return p == root or p.startswith(root + os.sep)
 
 
 def app_dirs(root=None):
@@ -57,7 +67,7 @@ def _dirs():
     for d in extra:
         if os.path.isdir(d) and d not in sys.path:
             sys.path.append(d)
-    return extra + [d for d in sys.path if d not in extra]
+    return extra
 
 
 def found():
@@ -80,9 +90,10 @@ def found():
     return out
 
 
-def tools(out_dir, own):
+def tools(out_dir, own, groups=()):
     """The add-ons' tools as Tool objects. own: {name: fn} of this
-    server's tools (an add-on may call them; it may not replace them)."""
+    server's tools (an add-on may call them; it may not replace them).
+    groups: this server's own group names; an add-on may not take one."""
     del LOADED[:]
     del SKIPPED[:]
     result = []
@@ -98,6 +109,10 @@ def tools(out_dir, own):
             continue
         names = []
         for sp in specs:
+            g = sp.get("group") or name.split(".")[0]
+            if g in groups:
+                SKIPPED.append({"module": name, "tool": sp.get("name"), "why": f"group {g!r} is this server's own"})
+                continue
             n = sp.get("name")
             if not n or n in taken:
                 SKIPPED.append({"module": name, "tool": n, "why": "no name, or the name of a tool that is already there"})
@@ -105,7 +120,7 @@ def tools(out_dir, own):
             taken.add(n)
             names.append(n)
             result.append(Tool(n, sp.get("description", ""), sp.get("inputSchema") or {"type": "object", "properties": {}},
-                               sp["fn"], changes=bool(sp.get("changes")), group=sp.get("group") or name.split(".")[0]))
+                               sp["fn"], changes=bool(sp.get("changes")), group=g))
         LOADED.append({"module": name, "version": getattr(mod, "VERSION", None), "license": getattr(mod, "LICENSE", None),
                        "credit": getattr(mod, "CREDIT", None), "tools": names})
     return result
