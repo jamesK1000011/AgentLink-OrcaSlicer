@@ -57,7 +57,8 @@ const a = await run({ ORCALINK_FROM: root, ORCALINK_PYTHON: process.env.PYTHON |
 check(a.get(1).result.serverInfo.name === 'orcaslicer-agentlink', 'initialize names the server')
 const names = a.get(2).result.tools.map((t) => t.name)
 check(['orca_project', 'orca_paint', 'orca_slice', 'gcode_read', 'orca_calibrate', 'orca_status'].every((n) => names.includes(n)), 'the tools are listed')
-check(JSON.parse(a.get(3).result.content[0].text).out === path.join(tmp, 'out'), 'orca_status answers with the output folder')
+// Under the home folder (HOME is tmp here) the answer shows ~/… (red team 3).
+check([path.join(tmp, 'out'), '~/out'].includes(JSON.parse(a.get(3).result.content[0].text).out), 'orca_status answers with the output folder')
 
 // No Python anywhere it looks: an answer that says so, never silence.
 const b = await run({ ORCALINK_FROM: root, ORCALINK_PYTHON: '/nonexistent/python3', PATH: '/nonexistent' })

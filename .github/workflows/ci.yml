@@ -2,8 +2,8 @@
 # Agent Link for OrcaSlicer's tests: plain Python, no FreeCAD. The oldest
 # Python it supports (a Mac's own 3.9) without a slicer, and 3.12 with the
 # latest OrcaSlicer's AppImage for the end-to-end loop; and the FreeCAD side
-# of the bridge (orcalink.fam_freecad) on the newest FreeCAD with Agent Link
-# for FreeCAD beside it.
+# of the bridge (orcalink.fam_freecad) on FreeCAD 1.1 (a release, not a weekly build) with Agent Link
+# for FreeCAD and Workshop (one add-on, its packages at the top) beside it.
 name: Agent Link for OrcaSlicer tests
 
 on:
@@ -84,10 +84,10 @@ jobs:
           path: workshop-addons
       - uses: mamba-org/setup-micromamba@v2
         with:
-          environment-name: fc-newest
+          environment-name: fc-1.1
           create-args: >-
             -c conda-forge
-            freecad
+            freecad=1.1
             python=3.11
             numpy
           cache-environment: true
@@ -106,7 +106,7 @@ jobs:
         timeout-minutes: 15
         run: |
           code=0
-          export FREECAD_LIB=$CONDA_PREFIX/lib ORCALINK_DIR="$GITHUB_WORKSPACE" PYTHONPATH="$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/agentlink-addon:$GITHUB_WORKSPACE/workshop-addons/Common:$GITHUB_WORKSPACE/workshop-addons/Parts:$GITHUB_WORKSPACE/workshop-addons/Make"
+          export FREECAD_LIB=$CONDA_PREFIX/lib ORCALINK_DIR="$GITHUB_WORKSPACE" PYTHONPATH="$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/agentlink-addon:$GITHUB_WORKSPACE/workshop-addons"
           python -X faulthandler -m unittest discover -s tests -p test_freecad_bridge.py -v > "$RUNNER_TEMP/bridge.log" 2>&1 || code=$?
           tail -n 200 "$RUNNER_TEMP/bridge.log"
           echo "exit code: $code"
