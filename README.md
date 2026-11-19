@@ -3,16 +3,32 @@
 
 > Not affiliated with or endorsed by the OrcaSlicer project. Get OrcaSlicer itself from its [official repository](https://github.com/OrcaSlicer/OrcaSlicer).
 
-Agent Link for OrcaSlicer lets an AI agent, such as Claude, use OrcaSlicer for
-you. It works headless: the OrcaSlicer window does not need to be open. The
-agent can make and change OrcaSlicer projects (`.3mf`), paint supports or
-seams, build calibration prints, slice with OrcaSlicer's own command line, and
-read the G-code back layer by layer. It is plain Python. It talks to the agent
-over the Model Context Protocol (MCP), with a small companion MCP server.
+- [What it is](#what-it-is)
+- [What you need](#what-you-need)
+- [Install](#install)
+- [First steps](#first-steps)
+- [Screenshots](#screenshots)
+- [What an agent can do with it](#what-an-agent-can-do-with-it)
+- [Troubleshooting](#troubleshooting)
+- [Privacy](#privacy)
+- [Uninstall](#uninstall)
+- [Licence](#licence) and [Credits](#credits)
 
 How it works inside, with a diagram: [docs/workflow/](https://github.com/jamesK1000011/AgentLink-OrcaSlicer/blob/main/docs/workflow/README.md).
 
-## Who it is for
+## What it is
+
+Agent Link for OrcaSlicer lets an AI agent, such as Claude, use OrcaSlicer for you.
+OrcaSlicer is a slicer: it turns a 3D model into G-code, the instructions a 3D printer follows.
+The agent can make and change OrcaSlicer projects (`.3mf`), paint supports or seams,
+build calibration prints, slice with OrcaSlicer's own command line, and read the G-code back layer by layer.
+It works headless: the OrcaSlicer window does not need to be open, and it does not take your mouse or screen.
+Starting a print is always your decision.
+
+It is an add-on for [Agent Link for FreeCAD](https://github.com/jamesK1000011/AgentLink-FreeCAD).
+It can also run alone, as its own small MCP server (MCP, the Model Context Protocol, is how an agent uses a program).
+
+### Who it is for
 
 - People who 3D print with OrcaSlicer and want to ask for a print in plain
   words ("slice this with 0.2 mm layers and supports only under the overhang").
@@ -23,57 +39,106 @@ How it works inside, with a diagram: [docs/workflow/](https://github.com/jamesK1
 
 You do not need to know OrcaSlicer's settings by heart. You do not need FreeCAD.
 
-## It runs beside OrcaSlicer, not inside FreeCAD
+### It runs beside OrcaSlicer, not inside FreeCAD
 
 This is not a FreeCAD workbench. It has no menus or panel in FreeCAD, and it
 is not listed in FreeCAD's Addon Manager. It runs OrcaSlicer as a separate
 program and reads and writes its files.
 
-<!-- screenshot: Claude Desktop with the OrcaSlicer extension listed under Extensions -->
+## What you need
+
+- **OrcaSlicer**, from its [releases](https://github.com/OrcaSlicer/OrcaSlicer/releases). On a Mac, put it in Applications.
+- **Python 3.9 or newer.** On a Mac, the extension finds one: Homebrew's, python.org's, the Xcode command line tools', or FreeCAD's own.
+- **An MCP client**, for example Claude Desktop or Claude Code.
+- **For FreeCAD bodies:** [Agent Link for FreeCAD](https://github.com/jamesK1000011/AgentLink-FreeCAD) and FreeCAD 1.0 or later (1.1 recommended).
 
 ## Install
 
-You need OrcaSlicer, and Python 3.9 or newer.
+Pick one.
 
-**As its own Claude Desktop extension (Mac).** Open
-`orcaslicer-agentlink.mcpb` to install it. You get it from a release, or build
-it with `mcpb/build.sh`. The extension finds a Python already on the Mac
-(Homebrew's, python.org's, the Xcode command line tools', or FreeCAD's own)
-and OrcaSlicer in `/Applications`. At each start it fetches the newest
-version of this repository when it has changed. It talks to Claude only over
-its own pipes and opens no network port.
+### With Agent Link for FreeCAD (easiest)
+
+1. Install [Agent Link for FreeCAD](https://github.com/jamesK1000011/AgentLink-FreeCAD#install) with its Claude Desktop extension.
+2. Install OrcaSlicer.
+3. Start a new chat in Claude Desktop.
+
+The Agent Link extension's launcher installs this add-on for you into FreeCAD's `Mod` folder, as `OrcaLink`,
+at the commit its tests passed with. Agent Link then finds `orcalink/agentlink_families.py`
+and adds the orca tools to its own tool list. You do not need the separate extension for this.
+
+### As its own Claude Desktop extension (Mac)
+
+1. Install OrcaSlicer.
+2. Get `orcaslicer-agentlink.mcpb` from a release of this repository, or build it with `mcpb/build.sh`.
+3. Double-click the file. Claude Desktop asks you to install it.
+4. Start a new chat.
+
+The extension finds Python and OrcaSlicer in `/Applications`.
+At each start it fetches the newest version of this repository when it has changed.
+It talks to Claude only over its own pipes and opens no network port.
 
 Its settings in Claude Desktop:
 
-- **Output folder**: where projects, G-code and exports go (`~/AgentLink` by
-  default).
-- **OrcaSlicer**: the path to OrcaSlicer's program, only if it is not in
-  `/Applications`.
-- **Keep it up to date**: fetch the newest version at each start (on by
-  default).
+- **Output folder**: where projects, G-code and exports go (`~/AgentLink` by default).
+- **OrcaSlicer**: the path to OrcaSlicer's program, only if it is not in `/Applications`.
+- **Keep it up to date**: fetch the newest version at each start (on by default).
 
-**As part of Agent Link for FreeCAD.** The Agent Link extension's launcher
-installs this repository for you into FreeCAD's `Mod` folder, as `OrcaLink`,
-at the commit its tests passed with. Agent Link then finds
-`orcalink/agentlink_families.py` and adds the orca tools to its own tool list.
-You do not need the separate extension for this.
+### Any other MCP client
 
-**Any other MCP client.** Point the client at the companion server:
+1. Get a copy of this repository:
 
-```json
-{
-  "mcpServers": {
-    "orcaslicer": {
-      "command": "python3",
-      "args": ["/path/to/AgentLink-OrcaSlicer/orcalink_server.py", "--out", "~/Documents/AgentLink"]
-    }
-  }
-}
-```
+   ```
+   git clone https://github.com/jamesK1000011/AgentLink-OrcaSlicer
+   ```
+
+2. Add the companion server to your client's MCP settings. Put the real path of your copy in `args`:
+
+   ```json
+   {
+     "mcpServers": {
+       "orcaslicer": {
+         "command": "python3",
+         "args": ["/path/to/AgentLink-OrcaSlicer/orcalink_server.py", "--out", "~/Documents/AgentLink"]
+       }
+     }
+   }
+   ```
+
+3. Restart the client.
 
 OrcaSlicer is found where it is installed. To use another copy, set
 `AGENTLINK_ORCASLICER` to its program. Bambu Studio is found the same way,
 with `AGENTLINK_BAMBUSTUDIO`.
+
+## First steps
+
+Start a new chat. Try these prompts, one at a time.
+
+1. "Slice the box for my printer with 0.2 mm layers. How long does it take, and how much filament?"
+
+   The agent makes an OrcaSlicer project, slices it, and reads the G-code back.
+   It tells you the print time and the filament in grams and millimetres. The files go to `~/AgentLink`.
+
+2. "Add supports only under the overhang, then slice again."
+
+   The agent paints supports on the faces that point down and slices again. It tells you what changed.
+
+3. "Make a temperature tower for PETG."
+
+   The agent builds OrcaSlicer's temperature calibration print as a project, ready to slice.
+
+With FreeCAD, say which body to slice: "Slice the bracket from FreeCAD."
+
+## Screenshots
+
+<!-- screenshots: no screenshots are in the repository yet. Take these and add them under docs/images/:
+- Claude Desktop with the OrcaSlicer extension listed under Extensions
+- a sliced plate opened in OrcaSlicer's preview, from a project the agent made
+- a layer drawn by gcode_read as SVG
+- a calibration print project (temperature tower)
+-->
+
+No screenshots yet.
 
 ## What an agent can do with it
 
@@ -119,7 +184,7 @@ In more detail:
 
 Starting a print is always your call.
 
-## Alone or with Agent Link for FreeCAD
+### Alone or with Agent Link for FreeCAD
 
 | | Alone (companion server) | With Agent Link for FreeCAD |
 |---|---|---|
@@ -131,6 +196,37 @@ Starting a print is always your call.
 
 Only `orcalink/agentlink_families.py` and `orcalink/fam_freecad.py` touch
 FreeCAD, and only Agent Link loads them.
+
+## Troubleshooting
+
+**The agent cannot find OrcaSlicer.**
+Ask the agent to call `orca_status` (alone) or `session_state` (with Agent Link). It says what the server has to work with.
+Install OrcaSlicer in `/Applications`, or set `AGENTLINK_ORCASLICER` to its program
+(in the extension: the **OrcaSlicer** setting).
+
+**"busy": OrcaSlicer's own window is open.**
+OrcaSlicer's command line cannot run beside its open window. Nothing was changed.
+Save your work in OrcaSlicer's window and close it. Then ask again.
+
+**You changed a project in OrcaSlicer's window.**
+The agent works on the file, not on the open window.
+After the agent changes a project, reload it in OrcaSlicer to see the change.
+
+**Risky G-code is refused.**
+Custom G-code that could harm the printer is not written by the agent alone.
+Add it yourself in OrcaSlicer's window.
+
+**The orca tools are missing from the client's list.**
+Most clients read the tool list when a chat starts. After an install or an update, **start a new chat**.
+With Agent Link for FreeCAD, `session_state` shows an add-on that did not load under `leftOut`, with the error.
+`agentlink_update` (the Claude extension) fetches the add-ons again.
+
+**Logs.**
+- The extension (Mac): `~/Library/Logs/OrcaSlicer Agent Link`.
+- Claude Desktop: `~/Library/Logs/Claude/mcp-server-*.log`.
+- Other clients show the server's messages in their own MCP log.
+
+Read a log before you share it in a bug report. It can name your files.
 
 ## Privacy
 
