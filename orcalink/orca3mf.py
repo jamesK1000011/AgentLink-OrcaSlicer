@@ -90,6 +90,10 @@ def check(key, value, scope="project"):
     """value made what Orca keeps for key (strings, lists of strings for the
     plural types), or ProjectError naming what is wrong. scope: project,
     object, part, range — the last three take process settings only."""
+    from . import guard
+
+    if guard.is_program_key(key):
+        raise ProjectError(f"{key}: names a program or a plug-in that the slicer runs; never set here.")
     table = options()["options"]
     o = table.get(key)
     if not o:
@@ -202,6 +206,7 @@ def weld(tris):
 MAX_COORD = 1e5
 MAX_BYTES = 512 * 1024 * 1024
 MAX_TRIANGLES = 20_000_000
+MAX_MEMBERS = 20_000
 
 
 def checked(tris, name="the model"):
@@ -223,6 +228,8 @@ def zip_members(z, what="the archive", only=None):
     they would unpack to more than MAX_BYTES or one is packed a thousand to
     one (a ZIP bomb). only: a function choosing the members to read."""
     infos = [i for i in z.infolist() if not i.is_dir() and (only is None or only(i.filename))]
+    if len(infos) > MAX_MEMBERS:
+        raise ProjectError(f"{what} holds {len(infos)} files, more than {MAX_MEMBERS}: not opened.")
     total = sum(i.file_size for i in infos)
     if total > MAX_BYTES:
         raise ProjectError(f"{what} unpacks to {total // (1024 * 1024)} MB, more than {MAX_BYTES // (1024 * 1024)} MB: not opened.")
@@ -2057,8 +2064,67 @@ class Project:
             except ET.ParseError:
                 pass
 
+    def programs(self):
+        """{where: {key: value}} of settings in the project that name a
+        program or a plug-in (post_process …): the project's own, and each
+        object's and part's."""
+        from . import guard
+
+        out = {}
+        got = guard.programs_in(self.config)
+        if got:
+            out["project"] = got
+        for el in self.settings_xml.iter():
+            if el.tag in ("object", "part"):
+                own = guard.programs_in(_meta(el))
+                if own:
+                    out[f"{el.tag} {el.get('id')}"] = own
+        for n, data in self._other_configs():
+            got = guard.programs_in(data)
+            if got:
+                out[n] = got
+        return out
+
+    def _other_configs(self):
+        """[(member, dict)] of the project's other JSON settings members
+        (presets kept in the 3MF: Metadata/*.config)."""
+        out = []
+        for n in sorted(self.files):
+            if n.startswith("Metadata/") and n.endswith(".config") and n not in (PROJECT, SETTINGS, SLICE_INFO):
+                raw = self.files[n]
+                if b"post_process" not in raw and b"plugin" not in raw:
+                    continue
+                try:
+                    d = json.loads(raw)
+                except (ValueError, UnicodeDecodeError):
+                    continue
+                if isinstance(d, dict):
+                    out.append((n, d))
+        return out
+
+    def empty_programs(self):
+        """Every setting that names a program emptied (the project's, the
+        objects' and the parts'); answers the keys."""
+        from . import guard
+
+        hit = guard.empty_programs(self.config)
+        for el in self.settings_xml.iter():
+            if el.tag in ("object", "part"):
+                for m in el.findall("metadata"):
+                    if guard.is_program_key(m.get("key")) and (m.get("value") or "").strip():
+                        m.set("value", "")
+                        hit.append(m.get("key"))
+        for n, d in self._other_configs():
+            got = guard.empty_programs(d)
+            if got:
+                hit += got
+                self.files[n] = json.dumps(d, indent=4, ensure_ascii=False).encode()
+        return sorted(set(hit))
+
     def save(self, path=None):
         path = path or self.path
+        # A project this server writes never names a program for the slicer to run.
+        self.empty_programs()
         if self.changed:
             self.strip_results()
         self.files[MODEL] = _xml(self.model)

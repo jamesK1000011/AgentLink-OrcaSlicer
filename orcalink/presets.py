@@ -14,6 +14,7 @@ each part the slicer's own JSON, flattened (no "inherits")."""
 import glob
 import json
 import os
+import re
 
 KINDS = ("machine", "process", "filament")
 HOME = os.path.expanduser("~")
@@ -576,14 +577,24 @@ def fetch_orca(vendors, version=None, exe=None, repo=None):
         version = orca_version(exe) if exe else None
     if not version:
         raise PresetError("Which OrcaSlicer: none found here to read its version from — give version.")
+    if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise PresetError(f"version {str(version)[:40]!r}: three numbers, as 2.3.1 (OrcaSlicer's release).")
+    bad = [v for v in vendors if not isinstance(v, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 _.+-]*", v) or ".." in v]
+    if bad:
+        raise PresetError(f"vendor {str(bad[0])[:40]!r}: a vendor's folder name, as OrcaSlicer's resources/profiles lists them.")
     git = shutil.which("git") or next((g for g in ("/usr/bin/git", "/opt/homebrew/bin/git", "/usr/local/bin/git") if os.path.exists(g)), None)
     if not git:
         raise PresetError("git is not installed on this computer: it fetches the presets.")
     dest = os.path.join(ORCA_CACHE, version)
+    cache = os.path.realpath(ORCA_CACHE)
+    if os.path.dirname(os.path.realpath(dest)) != cache:
+        raise PresetError(f"version {version}: its folder is not inside the preset cache.")
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    # A repository's own settings never run a program here.
+    safe = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"]
 
     def run(*args, timeout=600):
-        r = subprocess.run([git, *args], capture_output=True, text=True, timeout=timeout, env=env)
+        r = subprocess.run([git, *safe, *args], capture_output=True, text=True, timeout=timeout, env=env)
         if r.returncode != 0:
             raise PresetError(f"git {args[0]}: {((r.stderr or r.stdout).strip().splitlines() or ['failed'])[-1]}")
         return r

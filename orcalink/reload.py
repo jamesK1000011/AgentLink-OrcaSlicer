@@ -180,8 +180,9 @@ def _loads(d):
     """The folder's server imports and builds its tools (the launcher's own
     check before it uses a version)."""
     try:
-        r = subprocess.run([sys.executable, "-I", "-c", "import sys; sys.path.insert(0, sys.argv[1]); from orcalink.server import build; build(sys.argv[2])",
-                            d, tempfile.mkdtemp(prefix="orcalink-check-")], capture_output=True, timeout=60)
+        with tempfile.TemporaryDirectory(prefix="orcalink-check-") as tmp:
+            r = subprocess.run([sys.executable, "-I", "-c", "import sys; sys.path.insert(0, sys.argv[1]); from orcalink.server import build; build(sys.argv[2])",
+                                d, tmp], capture_output=True, timeout=60)
         return r.returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False

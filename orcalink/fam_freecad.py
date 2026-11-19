@@ -198,15 +198,25 @@ def tools(session):
     from . import tools as OT
     from .protocol import ToolError as OrcaError
 
-    made = OT.tools(lambda: session.out_dir, geo_for(session, OT.Geo))
+    from .guard import tilde
+
+    try:  # the person's approval through the client (Agent Link's approve_code)
+        from agentlink import approvals
+
+        def approve(what, lines, fingerprint, name):
+            return approvals.ask("gcode", name, what, lines, fingerprint=fingerprint, shown={"source": name})
+    except ImportError:
+        approve = None
+    made = OT.tools(lambda: session.out_dir, geo_for(session, OT.Geo), approve=approve)
 
     def wrap(fn):
-        # orcalink's refusals become Agent Link's (the same code and message).
+        # orcalink's refusals become Agent Link's (the same code and message);
+        # paths under the home folder show as ~/...
         def call(a):
             try:
-                return fn(a)
+                return tilde(fn(a))
             except OrcaError as e:
-                raise ToolError(e.code, e.message)
+                raise ToolError(e.code, tilde(e.message))
 
         return call
 

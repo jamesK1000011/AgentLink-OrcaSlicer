@@ -22,6 +22,7 @@ orcalink/draco.py
 orcalink/fam_freecad.py
 orcalink/freecad_guides/orca.md
 orcalink/gcode_view.py
+orcalink/guard.py
 orcalink/guides/orca.md
 orcalink/meshgen.py
 orcalink/orca3mf.py

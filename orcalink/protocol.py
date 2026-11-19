@@ -315,9 +315,14 @@ class Server:
             return self.refusal("failed", f"{name} failed: {e}")
         image = None
         if isinstance(out, dict):
+            image = out.pop("_png", None)
+        # Paths under the home folder as ~/... (transcripts are shared).
+        from .guard import tilde
+
+        out = tilde(out)
+        if isinstance(out, dict):
             # A picture for the agent to look at: image content beside the
             # text (the file is written as well; inline false leaves it out).
-            image = out.pop("_png", None)
             out.setdefault("ms", int((time.time() - t0) * 1000))
         text = compact(out)
         if len(text) > MAX_REPLY and isinstance(out, dict):
@@ -332,6 +337,9 @@ class Server:
 
     @staticmethod
     def refusal(code, message):
+        from .guard import tilde
+
+        message = tilde(message)
         return {"content": [{"type": "text", "text": compact({"error": {"code": code, "message": message}})}], "isError": True}
 
 

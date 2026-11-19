@@ -13,9 +13,11 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 import zipfile
 
+from . import guard
 from . import prusa
 
 
@@ -137,7 +139,7 @@ def minimal_profiles(settings, folder):
 LAST = {}
 
 
-def slice_with(name, stl, gcode, settings, profiles=None, timeout=900, options=None):
+def _slice_with(name, stl, gcode, settings, profiles=None, timeout=900, options=None):
     """Slice stl (a path, or a list of them on one plate) into gcode with the
     named slicer. options (OrcaSlicer and Bambu Studio): orient, arrange
     (each bool), project (a .3mf path: the sliced plate as a project the
@@ -229,7 +231,7 @@ SLICE_FLAGS = {"timelapse": "--enable-timelapse", "allow_mix_temp": "--allow-mix
 SLICE_VALUES = {"skip_objects": "--skip-objects", "mtcpp": "--mtcpp", "mstpp": "--mstpp", "clone_objects": "--clone-objects", "load_filament_ids": "--load-filament-ids"}
 
 
-def slice_project(name, threemf, out_dir, timeout=900, export=None, plate=0, options=None, bake_textures=False):
+def _slice_project(name, threemf, out_dir, timeout=900, export=None, plate=0, options=None, bake_textures=False):
     """A project (.3mf) sliced as it stands — its own presets, settings,
     plates and objects, as the person left them in the slicer's window.
     export: a .3mf path for the sliced project. bake_textures: bake painted
@@ -273,7 +275,7 @@ def slice_project(name, threemf, out_dir, timeout=900, export=None, plate=0, opt
     return exe, found
 
 
-def make_project(name, stls, dest, settings, profiles=None, options=None, timeout=600):
+def _make_project(name, stls, dest, settings, profiles=None, options=None, timeout=600):
     """An unsliced project (.3mf) from STLs, one object each, with the
     profiles given (or minimal ones from settings): what the window makes
     when the files are dropped on its plate. options: orient, arrange."""
@@ -317,7 +319,7 @@ RELAYOUT_FLAGS = ("allow_rotations", "align_to_y_axis", "avoid_extrusion_cali_re
                   "min_save", "allow_newer_file", "skip_modified_gcodes", "repair", "ground_largest_face", "convert_unit")
 
 
-def relayout(name, threemf, arrange=False, orient=False, options=None, timeout=600):
+def _relayout(name, threemf, arrange=False, orient=False, options=None, timeout=600):
     """The project's objects arranged on their plates and/or turned to their
     best side by the slicer itself, the project re-saved in place. options:
     any of RELAYOUT_FLAGS (true), clone_objects "1,3,…", repetitions n,
@@ -352,7 +354,7 @@ def relayout(name, threemf, arrange=False, orient=False, options=None, timeout=6
     return exe
 
 
-def inspect(name, threemf, what="mesh", timeout=300):
+def _inspect(name, threemf, what="mesh", timeout=300):
     """The slicer's own report on a project: what mesh (--inspect-mesh, each
     object's size and mesh), paint (--inspect-paint, painted layers) or info
     (--info). JSON when it prints JSON, else the text."""
@@ -379,7 +381,7 @@ EXPORTS = {"stl": ("--export-stl", None), "stls": ("--export-stls", "stls"), "se
            "slicedata": ("--export-slicedata", "slicedata"), "3mf": ("--export-3mf", "export.3mf")}
 
 
-def export_project(name, threemf, out_dir, what, filename=None, timeout=600):
+def _export_project(name, threemf, out_dir, what, filename=None, timeout=600):
     """A project's objects or settings written out by the command line:
     what stl (all objects in one), stls (one each, a folder), settings (the
     project's config as JSON), slicedata (the sliced layers, a folder) or
@@ -402,6 +404,165 @@ def export_project(name, threemf, out_dir, what, filename=None, timeout=600):
         why = result_error(out_dir)
         raise _failed(run, why)
     return made
+
+
+# ---- no program from data (red team 3, R3-2) ---------------------------------------------------
+# A slicer runs the programs a project or a profile names in post_process
+# (and loads plugins) after it writes the G-code. Every file a slicer reads
+# here goes to it with those keys empty: a copy in a temporary folder (the
+# person's own file is not changed), removed after the run. Keys emptied in
+# the last run's files: PROGRAMS_EMPTIED.
+PROGRAMS_EMPTIED = []
+_MARKS = (b"post_process", b"plugin")
+
+
+def _3mf_has_programs(path):
+    try:
+        with zipfile.ZipFile(path) as z:
+            for i in z.infolist():
+                if i.filename.startswith("Metadata/") and i.filename.endswith(".config") and i.file_size < 64 * 1024 * 1024:
+                    data = z.read(i)
+                    if any(m in data for m in _MARKS):
+                        return True
+    except (OSError, zipfile.BadZipFile):
+        return False
+    return False
+
+
+class _Clean:
+    """Files for a slicer with every program key emptied."""
+
+    def __init__(self):
+        self.dir = None
+        self.emptied = []
+
+    def _copy_path(self, path):
+        if self.dir is None:
+            self.dir = tempfile.mkdtemp(prefix="orcalink-clean-")
+        n = len(os.listdir(self.dir))
+        return os.path.join(self.dir, f"{n}-{os.path.basename(path)}")
+
+    def file(self, path):
+        if not isinstance(path, str) or not os.path.isfile(path):
+            return path
+        low = path.lower()
+        if low.endswith(".3mf"):
+            if not _3mf_has_programs(path):
+                return path
+            from . import orca3mf
+
+            pr = orca3mf.Project(path)
+            hit = pr.empty_programs()
+            if not hit:
+                return path
+            self.emptied += hit
+            return pr.save(self._copy_path(path))
+        if low.endswith(".json"):
+            try:
+                with open(path, encoding="utf-8") as f:
+                    data = json.load(f)
+            except (OSError, ValueError):
+                return path
+            hit = guard.empty_programs(data) if isinstance(data, dict) else []
+            if not hit:
+                return path
+            self.emptied += hit
+            q = self._copy_path(path)
+            with open(q, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=1)
+            return q
+        if low.endswith((".ini", ".config")):
+            with open(path, encoding="utf-8", errors="replace") as f:
+                text = f.read()
+            hit = list(guard.ini_programs(text))
+            if not hit:
+                return path
+            self.emptied += hit
+            q = self._copy_path(path)
+            with open(q, "w", encoding="utf-8") as f:
+                f.write(guard.ini_empty(text))
+            return q
+        return path
+
+    def profiles(self, profiles):
+        return {k: self.file(v) for k, v in (profiles or {}).items()}
+
+    def close(self):
+        PROGRAMS_EMPTIED[:] = sorted(set(self.emptied))
+        if self.dir:
+            shutil.rmtree(self.dir, ignore_errors=True)
+
+
+def slice_with(name, stl, gcode, settings, profiles=None, timeout=900, options=None):
+    """See _slice_with. Program keys refused in options.overrides and
+    emptied in every profile (a PrusaSlicer .ini too) and model project."""
+    options = dict(options or {})
+    bad = sorted(k for k in (options.get("overrides") or {}) if guard.is_program_key(k))
+    if bad:
+        raise RuntimeError(f"overrides: {', '.join(bad)} names a program or a plug-in that the slicer runs. It is never set here; a person adds it in the slicer's own window.")
+    cl = _Clean()
+    try:
+        stls = [cl.file(x) for x in ([stl] if isinstance(stl, str) else list(stl))]
+        return _slice_with(name, stls[0] if isinstance(stl, str) else stls, gcode, settings, cl.profiles(profiles), timeout, options)
+    finally:
+        cl.close()
+
+
+def slice_project(name, threemf, out_dir, timeout=900, export=None, plate=0, options=None, bake_textures=False):
+    """See _slice_project; the project goes to the slicer with its program
+    keys emptied (a copy; the person's file is not changed)."""
+    cl = _Clean()
+    try:
+        return _slice_project(name, cl.file(threemf), out_dir, timeout, export, plate, options, bake_textures)
+    finally:
+        cl.close()
+
+
+def make_project(name, stls, dest, settings, profiles=None, options=None, timeout=600):
+    """See _make_project; models and profiles go to the slicer with their
+    program keys emptied, and the new project has none."""
+    cl = _Clean()
+    try:
+        exe = _make_project(name, [cl.file(x) for x in stls], dest, settings, cl.profiles(profiles), options, timeout)
+    finally:
+        cl.close()
+    if _3mf_has_programs(dest):
+        from . import orca3mf
+
+        orca3mf.Project(dest).save()
+    return exe
+
+
+def relayout(name, threemf, arrange=False, orient=False, options=None, timeout=600):
+    """See _relayout. The slicer rewrites the project in place, so its
+    program keys are emptied in place first."""
+    if _3mf_has_programs(threemf):
+        from . import orca3mf
+
+        pr = orca3mf.Project(threemf)
+        PROGRAMS_EMPTIED[:] = pr.empty_programs()
+        pr.save()
+    return _relayout(name, threemf, arrange, orient, options, timeout)
+
+
+def inspect(name, threemf, what="mesh", timeout=300):
+    cl = _Clean()
+    try:
+        return _inspect(name, cl.file(threemf), what, timeout)
+    finally:
+        cl.close()
+
+
+def export_project(name, threemf, out_dir, what, filename=None, timeout=600):
+    """See _export_project. filename: a file name only (no folders, not
+    hidden)."""
+    if filename is not None and (filename != os.path.basename(filename) or filename.startswith(".") or not filename.strip() or "\\" in filename):
+        raise ValueError(f"name: a file name only, no folders and not hidden ({filename!r}).")
+    cl = _Clean()
+    try:
+        return _export_project(name, cl.file(threemf), out_dir, what, filename, timeout)
+    finally:
+        cl.close()
 
 
 _HELP = {}
@@ -566,7 +727,10 @@ def read_gcode(path):
 
 def insert_pauses(path, pauses, command):
     """Each pause before the first layer whose height is past its z, by the
-    layer marks any of the three slicers writes. Returns where they went."""
+    layer marks any of the three slicers writes. Returns where they went.
+    command: one of M601, M600, M0, M1, PAUSE (one line, nothing else); a
+    note goes in as one comment line."""
+    command = guard.pause_command(command)
     with open(path, encoding="utf-8", errors="replace") as f:
         lines = f.read().split("\n")
     todo = sorted(pauses, key=lambda p: p["z"])
@@ -582,8 +746,9 @@ def insert_pauses(path, pauses, command):
             if z is not None:
                 while todo and z > todo[0]["z"] + 1e-6:
                     p = todo.pop(0)
-                    out += [f"; pause: {p['note']}", "M400", f"{command} ; {p['note']}"]
-                    done.append({"z": z, "note": p["note"]})
+                    note = guard.one_line(p.get("note"))
+                    out += [f"; pause: {note}", "M400", f"{command} ; {note}"]
+                    done.append({"z": z, "note": note})
         out.append(line)
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(out))
