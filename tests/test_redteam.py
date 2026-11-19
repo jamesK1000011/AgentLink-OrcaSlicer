@@ -380,5 +380,17 @@ class RedTeam3(RedTeam):
         return p
 
 
+
+class HubDeclarations(unittest.TestCase):
+    # The hub's path guard reads these from the FreeCAD family (hub 8ac1f25).
+    def test_writers_and_path_keys(self):
+        import ast
+        src = open(os.path.join(os.path.dirname(__file__), "..", "orcalink", "fam_freecad.py"), encoding="utf-8").read()
+        got = {n.targets[0].id: ast.literal_eval(n.value) for n in ast.parse(src).body
+               if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") in ("WRITERS", "PATH_KEYS")}
+        self.assertEqual(got["WRITERS"], {"orca_project", "orca_calibrate", "orca_slice"})
+        self.assertEqual(got["PATH_KEYS"]["orca_paint"], ["texture.file"])
+
+
 if __name__ == "__main__":
     unittest.main()

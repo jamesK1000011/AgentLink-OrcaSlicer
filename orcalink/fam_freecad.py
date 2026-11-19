@@ -13,6 +13,12 @@ from agentlink.protocol import Tool, ToolError
 
 GROUP = "orca"
 INFO = "OrcaSlicer headless (Agent Link for OrcaSlicer): projects from bodies, every setting and part, paint by faces, slice, export, G-code read back."
+# For the hub's path guard (agentlink/paths.py): these tools write, so
+# their path, saveAs and export fields are checked as writes; the nested
+# fields below are checked as reads. gcode_read is left out of WRITERS on
+# purpose: it reads G-code where the slicer put it (also under ~/Library).
+WRITERS = {"orca_project", "orca_calibrate", "orca_slice"}
+PATH_KEYS = {"orca_paint": ["texture.file"], "orca_calibrate": ["profiles.*"], "orca_project": ["profiles.*", "files"]}
 
 
 def _mesh_of(shape, tol=0.01):

@@ -6,6 +6,7 @@ All notable changes to Agent Link for OrcaSlicer. The format follows
 
 ## [Unreleased]
 
+- Inside FreeCAD, the hub's path guard checks the write paths of orca_project, orca_calibrate and orca_slice (WRITERS) and the read paths texture.file, profiles.* and files (PATH_KEYS). gcode_read stays a read.
 ### Security
 
 - Red team 3: settings that name a program (post_process, plugins) are refused and emptied before a slicer reads a project or a profile; one path check for reads and writes; heat, power, motors-off and pause checks in every G-code text; `force` alone no longer passes risky G-code (the person approves through Agent Link for FreeCAD, else it is refused); unpack limits for model ZIPs and G-code in a 3MF; the preset fetch takes only a version number and runs git without repository hooks; text from files cleaned; home paths shown as ~/...; temporary folders removed.
