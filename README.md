@@ -66,6 +66,14 @@ The Agent Link extension's launcher installs this add-on for you into FreeCAD's 
 at the commit its tests passed with. Agent Link then finds `orcalink/agentlink_families.py`
 and adds the orca tools to its own tool list. You do not need the separate extension for this.
 
+With Agent Link for FreeCAD but without its Claude Desktop extension (for example Claude Code, or Linux),
+put a copy in FreeCAD's `Mod` folder as `OrcaLink` and restart FreeCAD.
+To find the folder, type `FreeCAD.getUserAppDataDir()` in FreeCAD's Python console (the `Mod` folder is inside it).
+
+```
+git clone https://github.com/jamesK1000011/AgentLink-OrcaSlicer "<FreeCAD user folder>/Mod/OrcaLink"
+```
+
 ### As its own Claude Desktop extension (Mac)
 
 1. Install OrcaSlicer.
@@ -98,11 +106,14 @@ Its settings in Claude Desktop:
      "mcpServers": {
        "orcaslicer": {
          "command": "python3",
-         "args": ["/path/to/AgentLink-OrcaSlicer/orcalink_server.py", "--out", "~/Documents/AgentLink"]
+         "args": ["/path/to/AgentLink-OrcaSlicer/orcalink_server.py", "--out", "~/AgentLink"]
        }
      }
    }
    ```
+
+   On Windows, use `python` (or the full path of `python.exe`) for `command`.
+   Without `--out`, files go to `~/Documents/AgentLink`.
 
 3. Restart the client.
 
@@ -117,7 +128,7 @@ Start a new chat. Try these prompts, one at a time.
 1. "Slice the box for my printer with 0.2 mm layers. How long does it take, and how much filament?"
 
    The agent makes an OrcaSlicer project, slices it, and reads the G-code back.
-   It tells you the print time and the filament in grams and millimetres. The files go to `~/AgentLink`.
+   It tells you the print time and the filament in grams and millimetres. The files go to the output folder (`~/AgentLink` by default).
 
 2. "Add supports only under the overhang, then slice again."
 
@@ -250,8 +261,8 @@ to the AI provider your MCP client uses, under that provider's terms.
   OrcaSlicer ▸ Uninstall. Its downloaded copies are in
   `~/.config/orcaslicer-agentlink` and its log in
   `~/Library/Logs/OrcaSlicer Agent Link`; delete them too if you like.
-- **Installed by Agent Link for FreeCAD**: delete the `OrcaLink` folder from
-  FreeCAD's `Mod` folder.
+- **Installed by Agent Link for FreeCAD, or by hand**: delete the `OrcaLink`
+  folder from FreeCAD's `Mod` folder.
 - **Another MCP client**: remove the `orcaslicer` entry from its config.
 - **Your files** in `~/AgentLink` are yours to keep or delete.
 
