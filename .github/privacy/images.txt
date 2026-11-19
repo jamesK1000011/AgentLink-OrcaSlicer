@@ -2,3 +2,5 @@
 # found free of personal data. One line each: "<sha256> <path>".
 # Add a line only after looking at the image itself.
 5bf3132350c45bc06ca025f48030232b708aef1bc2e3685b92538320ad15c8fc mcpb/icon.png
+# README screenshots (toolbars, panels, renders), FreeCAD 1.1.3 on a Mac, looked at 19 Nov 2026: no names, paths or personal data.
+9ee9d12d62a3ef4d13983282dcf6232c8b8f69981ee13aeb214fa4cb138daabc docs/images/slice-layer.png

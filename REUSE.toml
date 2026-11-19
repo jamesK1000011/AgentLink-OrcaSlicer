@@ -15,3 +15,9 @@ SPDX-License-Identifier = "LGPL-2.1-or-later"
 path = "orcalink/data/orca-options.json"
 SPDX-FileCopyrightText = "Setting names and limits: OrcaSlicer contributors"
 SPDX-License-Identifier = "LGPL-2.1-or-later"
+
+[[annotations]]
+# Screenshots of FreeCAD with this add-on, taken by Agent Link on 19 Nov 2026 and looked at (no personal data).
+path = ["docs/images/*.png"]
+SPDX-FileCopyrightText = "Agent Link for OrcaSlicer contributors"
+SPDX-License-Identifier = "LGPL-2.1-or-later"

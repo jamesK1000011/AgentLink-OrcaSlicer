@@ -6,6 +6,7 @@ REUSE.toml
 docs/hardening/orca-findings.md
 docs/hardening/orca-model.json
 docs/hardening/orcafix-findings.md
+docs/images/slice-layer.png
 docs/listing.md
 docs/workflow/README.md
 mcpb/build.sh

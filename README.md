@@ -142,14 +142,11 @@ With FreeCAD, say which body to slice: "Slice the bracket from FreeCAD."
 
 ## Screenshots
 
-<!-- screenshots: no screenshots are in the repository yet. Take these and add them under docs/images/:
-- Claude Desktop with the OrcaSlicer extension listed under Extensions
-- a sliced plate opened in OrcaSlicer's preview, from a project the agent made
-- a layer drawn by gcode_read as SVG
-- a calibration print project (temperature tower)
--->
+<!-- screenshots: still to take: Claude Desktop with the extension listed (not taken: it shows the account); a sliced plate in the OrcaSlicer preview; a calibration project -->
 
-No screenshots yet.
+![One layer of a sliced tray drawn by gcode_read, coloured by feature](https://github.com/jamesK1000011/AgentLink-OrcaSlicer/raw/main/docs/images/slice-layer.png)
+
+*Layer 12 of a sliced tray, drawn by gcode_read from the G-code (inner wall, outer wall, sparse infill).*
 
 ## What an agent can do with it
 
