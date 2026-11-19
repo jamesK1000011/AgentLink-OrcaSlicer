@@ -5,6 +5,7 @@ REUSE.toml
 docs/hardening/orca-findings.md
 docs/hardening/orca-model.json
 docs/hardening/orcafix-findings.md
+docs/workflow/README.md
 mcpb/build.sh
 mcpb/icon.png
 mcpb/icon.svg

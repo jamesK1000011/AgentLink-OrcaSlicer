@@ -10,6 +10,8 @@ seams, build calibration prints, slice with OrcaSlicer's own command line, and
 read the G-code back layer by layer. It is plain Python. It talks to the agent
 over the Model Context Protocol (MCP), with a small companion MCP server.
 
+How it works inside, with a diagram: [docs/workflow/](https://github.com/jamesK1000011/AgentLink-OrcaSlicer/blob/main/docs/workflow/README.md).
+
 ## Who it is for
 
 - People who 3D print with OrcaSlicer and want to ask for a print in plain
