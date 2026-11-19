@@ -2,8 +2,8 @@
   "manifest_version": "0.2",
   "name": "orcaslicer-agentlink",
   "display_name": "Agent Link for OrcaSlicer",
-  "version": "0.1.0",
-  "description": "Drive OrcaSlicer from Claude, headless: projects changed at every level, painted, sliced, exported, the G-code read back, calibration prints built.",
+  "version": "1.0.0",
+  "description": "Use OrcaSlicer from Claude without its window: change a project, paint parts, slice, export, read the G-code back and make calibration prints.",
   "long_description": "Runs Agent Link for OrcaSlicer (github.com/jamesK1000011/AgentLink-OrcaSlicer) with a Python already on this Mac: Homebrew's, python.org's, the Xcode tools', or FreeCAD's own. Finds OrcaSlicer in /Applications. No FreeCAD needed; with Agent Link for FreeCAD installed too, its orca group adds work from FreeCAD bodies. LGPL-2.1-or-later. OrcaSlicer itself is AGPL-3.0 and runs as its own program.",
   "icon": "icon.png",
   "author": {
@@ -70,5 +70,36 @@
     "runtimes": {
       "node": ">=18.0.0"
     }
-  }
+  },
+  "tools": [
+    {
+      "name": "orca_status",
+      "description": "Shows what the server can use: its version, the output folder and the slicers it found. Call it first."
+    },
+    {
+      "name": "guide_read",
+      "description": "Reads the guide to these tools: from project to slice to G-code, each orca_project action and its arguments."
+    },
+    {
+      "name": "orca_project",
+      "description": "Reads and changes an OrcaSlicer project file (.3mf): objects, plates, settings and per-layer G-code."
+    },
+    {
+      "name": "orca_paint",
+      "description": "Paints the triangles of a part in a project (supports, seams, fuzzy skin, colours, textures) and saves the project."
+    },
+    {
+      "name": "orca_calibrate",
+      "description": "Makes one of OrcaSlicer's calibration prints as a project, from the test models that OrcaSlicer ships."
+    },
+    {
+      "name": "orca_slice",
+      "description": "Slices a project with OrcaSlicer's command line, or exports from it (G-code, 3MF, STL)."
+    },
+    {
+      "name": "gcode_read",
+      "description": "Reads sliced G-code back as the preview shows it: layers, moves, times and material, to check a slice before you print."
+    }
+  ],
+  "tools_generated": true
 }

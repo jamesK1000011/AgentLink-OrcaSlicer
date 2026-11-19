@@ -212,9 +212,14 @@ Save your work in OrcaSlicer's window and close it. Then ask again.
 The agent works on the file, not on the open window.
 After the agent changes a project, reload it in OrcaSlicer to see the change.
 
-**Risky G-code is refused.**
+**Risky G-code needs your OK.**
 Custom G-code that could harm the printer is not written by the agent alone.
-Add it yourself in OrcaSlicer's window.
+Inside FreeCAD (through Agent Link for FreeCAD), the tool answers `pending`
+and asks for `approve_code` (kind `gcode`). Your client shows you the G-code
+lines; when you approve, the agent calls the tool again and it writes them.
+`force: true` does not take the place of your OK.
+When this server runs alone (its own extension or another client), no person
+can approve, so the G-code is refused. Add it yourself in OrcaSlicer's window.
 
 **The orca tools are missing from the client's list.**
 Most clients read the tool list when a chat starts. After an install or an update, **start a new chat**.

@@ -6,4 +6,4 @@ layer by layer, its calibration prints built. Plain Python, no FreeCAD; FreeCAD
 Agent Link uses it for its loop (bodies in, print settings back for the
 strength study) when both are installed."""
 
-VERSION = "0.1.0"
+VERSION = "1.0.0"

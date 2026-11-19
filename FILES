@@ -1,10 +1,12 @@
 CHANGELOG.md
 LICENSE
+LICENSES/LGPL-2.1-or-later.txt
 README.md
 REUSE.toml
 docs/hardening/orca-findings.md
 docs/hardening/orca-model.json
 docs/hardening/orcafix-findings.md
+docs/listing.md
 docs/workflow/README.md
 mcpb/build.sh
 mcpb/icon.png

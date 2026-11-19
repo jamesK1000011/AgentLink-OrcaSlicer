@@ -6,6 +6,13 @@ All notable changes to Agent Link for OrcaSlicer. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-19
+
+The first tagged release (V1). Agent Link for OrcaSlicer is an MCP server for OrcaSlicer. It changes, paints and slices projects without OrcaSlicer's window, and it reads the G-code back.
+It runs alone or as an add-on of Agent Link for FreeCAD. Inside FreeCAD, risky G-code goes to the person for approval (`approve_code`, kind `gcode`). Alone, the server refuses it.
+The server has no telemetry. Your models, projects and G-code stay on your computer.
+
+- Release (V1): version 1.0.0. The README says that risky G-code inside FreeCAD goes to `approve_code` (kind `gcode`). The extension's manifest lists the tools. `LICENSES/LGPL-2.1-or-later.txt` for REUSE. `docs/listing.md` holds the listing text and the privacy note.
 - Inside FreeCAD, the hub's path guard checks the write paths of orca_project, orca_calibrate and orca_slice (WRITERS) and the read paths texture.file, profiles.* and files (PATH_KEYS). gcode_read stays a read.
 ### Security
 
