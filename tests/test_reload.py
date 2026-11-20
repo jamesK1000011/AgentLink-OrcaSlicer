@@ -34,13 +34,19 @@ def cache_with(*versions, current=None):
     return d
 
 
+_LAST = 0.0
+
+
 def state(d, current, **more):
     p = os.path.join(d, "state.json")
     with open(p + ".tmp", "w") as f:
         json.dump({"current": current, **more}, f)
     os.replace(p + ".tmp", p)
-    # A new time even within the same second.
-    t = time.time() + (os.path.getmtime(p) - time.time()) + 1
+    # A time later than every earlier write, even within the same second
+    # (two writes in one tick got the same time, and newer() kept its cache).
+    global _LAST
+    t = max(os.path.getmtime(p), _LAST) + 1
+    _LAST = t
     os.utime(p, (t, t))
 
 
