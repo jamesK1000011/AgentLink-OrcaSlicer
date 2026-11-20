@@ -50,7 +50,7 @@ program and reads and writes its files.
 - **OrcaSlicer**, from its [releases](https://github.com/OrcaSlicer/OrcaSlicer/releases). On a Mac, put it in Applications.
 - **Python 3.9 or newer.** On a Mac, the extension finds one: Homebrew's, python.org's, the Xcode command line tools', or FreeCAD's own.
 - **An MCP client**, for example Claude Desktop or Claude Code.
-- **For FreeCAD bodies:** [Agent Link for FreeCAD](https://github.com/jamesK1000011/AgentLink-FreeCAD) and FreeCAD 1.0 or later (1.1 recommended).
+- **For FreeCAD bodies:** [Agent Link for FreeCAD](https://github.com/jamesK1000011/AgentLink-FreeCAD) and FreeCAD 1.1 or later.
 
 ## Install
 
