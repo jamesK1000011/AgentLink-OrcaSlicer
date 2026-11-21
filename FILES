@@ -39,6 +39,16 @@ orcalink/server.py
 orcalink/texdisp.py
 orcalink/tools.py
 orcalink_server.py
+tests/data/h2d-tpu-presets/system/BBL/filament/Bambu_PLA_Basic_@BBL_H2D.json
+tests/data/h2d-tpu-presets/system/BBL/filament/Bambu_TPU_95A_@BBL_H2D.json
+tests/data/h2d-tpu-presets/system/BBL/filament/Generic_TPU_@BBL_H2D.json
+tests/data/h2d-tpu-presets/system/BBL/filament/Generic_TPU_@BBL_X1.json
+tests/data/h2d-tpu-presets/system/BBL/filament/fdm_filament_tpu.json
+tests/data/h2d-tpu-presets/system/BBL/machine/Bambu_Lab_H2D_0.4_nozzle.json
+tests/data/h2d-tpu-presets/system/BBL/machine/fdm_machine_common.json
+tests/data/h2d-tpu-presets/system/BBL/process/0.20mm_Standard_@BBL_H2D.json
+tests/data/h2d-tpu-presets/user/1234/filament/SUNLU_TPU_95A_GEN2_@Bambu_Lab_H2D_0.4_nozzle.json
+tests/data/h2d-tpu-presets/user/1234/filament/base/SUNLU_TPU_95A_GEN2_@base.json
 tests/data/orca-two-boxes.json
 tests/data/texture-displacement-golden.json
 tests/test_addons.py
@@ -48,6 +58,7 @@ tests/test_draco.py
 tests/test_files.py
 tests/test_freecad_bridge.py
 tests/test_gcode_view.py
+tests/test_h2d_filament.py
 tests/test_meshgen.py
 tests/test_orca3mf.py
 tests/test_orca_sources.py

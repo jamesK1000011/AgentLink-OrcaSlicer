@@ -1,0 +1,23 @@
+{
+ "type": "filament",
+ "name": "fdm_filament_tpu",
+ "instantiation": "false",
+ "filament_type": [
+  "TPU"
+ ],
+ "filament_density": [
+  "1.22"
+ ],
+ "nozzle_temperature": [
+  "230"
+ ],
+ "filament_max_volumetric_speed": [
+  "3.6"
+ ],
+ "filament_retraction_length": [
+  "0.4"
+ ],
+ "filament_extruder_variant": [
+  "Direct Drive Standard"
+ ]
+}

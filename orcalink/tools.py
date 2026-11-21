@@ -1070,9 +1070,10 @@ def tools(out_dir=None, geo=None, guide=None, approve=None):
         return {"orca": t["orca"], "count": len(rows), "settings": rows[:lim], **({"more": len(rows) - lim} if len(rows) > lim else {}),
                 "note": "Keys and limits only; the person's OrcaSlicer shows each one's label and help."}
 
-    def presets_for(label, work, a=None):
+    def presets_for(label, work, a=None, chosen=None):
         """Settings and profiles for a new project: a saved bundle, preset
-        names, or the body's print setup (geo.presets)."""
+        names, or the body's print setup (geo.presets). chosen (a dict), when
+        given, gets the bundle used (for a fallback filament)."""
         a = a or {}
         from . import presets as SP
 
@@ -1081,8 +1082,33 @@ def tools(out_dir=None, geo=None, guide=None, approve=None):
                 data = SP.load_saved(s.out_dir, a["bundle"]) if a.get("bundle") else SP.bundle("orcaslicer", a["machine"], a.get("process"), a.get("filament"))
             except SP.PresetError as e:
                 raise ToolError("invalid_input", str(e))
+            if chosen is not None:
+                chosen["bundle"] = data
             return {}, SP.write_profiles(data, os.path.join(work, "presets"))
         return g.presets(label, work)
+
+    def fallback_filament(chosen, work, why):
+        """The nearest system filament of the same type in place of the
+        person's own, when theirs stops the command line: (profiles, note)
+        or None."""
+        from . import presets as SP
+
+        data = chosen.get("bundle")
+        if not data:
+            return None
+        try:
+            got = SP.fallback_bundle(data)
+        except SP.PresetError:
+            return None
+        if not got:
+            return None
+        new_data, frm, to = got
+        chosen["bundle"] = new_data
+        return SP.write_profiles(new_data, os.path.join(work, "presets")), {
+            "fallbackFrom": frm, "fallbackTo": to,
+            "fallbackNote": f"OrcaSlicer's command line could not use the filament preset {frm!r} ({why}). The project uses the system preset {to!r} "
+                            f"(the same filament type, for this printer) in its place. Tell the person. Their own temperatures and speeds are not in this project: "
+                            f"orca_project set changes them, or they choose their preset in OrcaSlicer's window."}
 
     def given_profiles(a, work, profiles):
         """Profiles given by path (profiles { machine, process, filament }):
@@ -1093,7 +1119,18 @@ def tools(out_dir=None, geo=None, guide=None, approve=None):
         from . import presets as SP
 
         out = {}
-        for k, p in (a.get("profiles") or {}).items():
+
+        def machine_of(done):
+            # The printer flattened first, so a filament can be fitted to its extruders.
+            m = done.get("machine")
+            try:
+                with open(m, encoding="utf-8") as f:
+                    return json.load(f)
+            except (TypeError, OSError, ValueError):
+                return None
+
+        given = a.get("profiles") or {}
+        for k, p in sorted(given.items(), key=lambda kv: kv[0] != "machine"):
             if not p or k not in SP.KINDS:
                 out[k] = p
                 continue
@@ -1101,7 +1138,7 @@ def tools(out_dir=None, geo=None, guide=None, approve=None):
             if not os.path.isfile(p):
                 raise ToolError("not_found", f"profiles.{k}: {p}: no such file.")
             try:
-                out[k] = SP.flatten_file("orcaslicer", k, p, os.path.join(work, "presets"))
+                out[k] = SP.flatten_file("orcaslicer", k, p, os.path.join(work, "presets"), machine=machine_of(out) if k == "filament" else None)
             except SP.PresetError as e:
                 raise ToolError("invalid_input", f"profiles.{k}: {e}")
             except ValueError as e:
@@ -1142,14 +1179,38 @@ def tools(out_dir=None, geo=None, guide=None, approve=None):
             work_models, bodies, label = files, [None] * len(files), None
         else:
             raise ToolError("invalid_input", "new: files (models: STL, OBJ, 3MF, STEP …) or bodies (CAD bodies, one object each).")
-        settings, profiles = presets_for(label, work, a)
+        chosen = {}
+        settings, profiles = presets_for(label, work, a, chosen)
         profiles = given_profiles(a, work, profiles)
+        fb = {}
+        checked = (chosen.get("bundle") or {}).get("checked") or {}
+        if checked.get("problems") and not a.get("profiles"):
+            # Checked before the command line: it would stop on these.
+            got = fallback_filament(chosen, work, "; ".join(checked["problems"][:3]))
+            if got:
+                profiles, fb = got
+        opts = {k: True for k in ("orient", "arrange") if a.get(k)}
         try:
-            slicers.make_project("orcaslicer", work_models, dest, settings, profiles, {k: True for k in ("orient", "arrange") if a.get(k)})
+            try:
+                slicers.make_project("orcaslicer", work_models, dest, settings, profiles, opts)
+            except RuntimeError as e:
+                from . import presets as SP
+
+                if isinstance(e, slicers.SlicerBusy) or SP.CRASH_SIGNATURE not in str(e) or fb or a.get("profiles"):
+                    raise
+                got = fallback_filament(chosen, work, str(e)[:200])
+                if not got:
+                    raise
+                profiles, fb = got
+                slicers.make_project("orcaslicer", work_models, dest, settings, profiles, opts)
         except FileNotFoundError as e:
             raise ToolError("unavailable", str(e))
         except RuntimeError as e:
             raise cli_error(e)
+        if checked.get("filled") and not fb:
+            fb["presetFilled"] = checked["filled"][:20]
+            fb["presetFilledNote"] = (f"The filament preset left these lists out or empty for this printer's extruders; they were taken from "
+                                      f"{checked.get('reference') or 'the printer’s default filament'} (the person's own values kept).")
         proj = O.Project(dest)
         objs = proj.objects()
         # The command line leaves every new project on Cool Plate, which PETG,
@@ -1174,6 +1235,7 @@ def tools(out_dir=None, geo=None, guide=None, approve=None):
         return {"project": dest, "objects": [{"index": o["index"], "name": o["name"], **({"body": body_name(proj, o, src_map)} if body_name(proj, o, src_map) else {})} for o in objs],
                 "bedType": proj.bed_type(), "bedTypes": fits, **bed_note,
                 "bedTypeNote": "Chosen from the filaments' bed temperatures; if the plate on the printer is another of bedTypes, orca_project set { key: curr_bed_type, value } changes it.",
+                **fb,
                 "next": "orca_project set/part_add/gcode change it; orca_paint paints it; orca_slice slices it."}
 
     # ---- texture displacement (orca_paint kind texture) ---------------------------------------

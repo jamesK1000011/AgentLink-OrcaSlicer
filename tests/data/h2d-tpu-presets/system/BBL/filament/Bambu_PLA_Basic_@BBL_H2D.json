@@ -1,0 +1,26 @@
+{
+ "type": "filament",
+ "name": "Bambu PLA Basic @BBL H2D",
+ "filament_type": [
+  "PLA"
+ ],
+ "compatible_printers": [
+  "Bambu Lab H2D 0.4 nozzle"
+ ],
+ "filament_extruder_variant": [
+  "Direct Drive Standard",
+  "Direct Drive High Flow"
+ ],
+ "nozzle_temperature": [
+  "220",
+  "220"
+ ],
+ "filament_max_volumetric_speed": [
+  "21",
+  "28"
+ ],
+ "filament_flush_temp": [
+  "0",
+  "0"
+ ]
+}

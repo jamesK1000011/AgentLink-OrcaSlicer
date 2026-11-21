@@ -1,0 +1,28 @@
+{
+ "type": "filament",
+ "name": "Generic TPU @BBL H2D",
+ "inherits": "fdm_filament_tpu",
+ "compatible_printers": [
+  "Bambu Lab H2D 0.4 nozzle"
+ ],
+ "filament_extruder_variant": [
+  "Direct Drive Standard",
+  "Direct Drive High Flow"
+ ],
+ "nozzle_temperature": [
+  "240",
+  "240"
+ ],
+ "filament_max_volumetric_speed": [
+  "3.2",
+  "3.2"
+ ],
+ "filament_retraction_length": [
+  "0.4",
+  "0.4"
+ ],
+ "filament_flush_temp": [
+  "0",
+  "0"
+ ]
+}

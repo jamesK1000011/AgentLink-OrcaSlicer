@@ -1,0 +1,14 @@
+{
+ "name": "SUNLU TPU 95A GEN2 @Bambu Lab H2D 0.4 nozzle",
+ "inherits": "SUNLU TPU 95A GEN2 @base",
+ "from": "User",
+ "compatible_printers": [
+  "Bambu Lab H2D 0.4 nozzle"
+ ],
+ "nozzle_temperature": [
+  "225"
+ ],
+ "filament_max_volumetric_speed": [],
+ "filament_ids": [],
+ "filament_flush_temp": []
+}

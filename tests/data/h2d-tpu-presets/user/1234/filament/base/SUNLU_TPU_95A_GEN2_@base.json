@@ -1,0 +1,13 @@
+{
+ "type": "filament",
+ "name": "SUNLU TPU 95A GEN2 @base",
+ "inherits": "fdm_filament_tpu",
+ "from": "User",
+ "instantiation": "false",
+ "filament_vendor": [
+  "SUNLU"
+ ],
+ "filament_density": [
+  "1.21"
+ ]
+}

@@ -6,6 +6,10 @@ All notable changes to Agent Link for OrcaSlicer. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- orca_project new: a filament preset of the person's own on a printer with two extruders (Bambu Lab H2D) stopped OrcaSlicer's command line (code -6, "Assigning from an empty vector"). Each list it leaves out now comes from the nearest system filament of the same type for that printer, and each per-extruder list gets a value for each extruder variant. The filament is checked before the command line. If the command line still stops so, the project is made once more with that system filament, and the answer says so (`fallbackFrom`, `fallbackTo`). Tests with fixture presets (tests/data/h2d-tpu-presets).
+
 ## [1.0.0] - 2026-11-19
 
 The first tagged release (V1). Agent Link for OrcaSlicer is an MCP server for OrcaSlicer. It changes, paints and slices projects without OrcaSlicer's window, and it reads the G-code back.

@@ -292,7 +292,168 @@ def complete(kind, data):
     return {k: v for k, v in data.items() if not (isinstance(v, list) and not v)}
 
 
-def flatten_file(slicer, kind, path, folder_):
+# ---- a user filament made whole for a printer with more than one extruder --------------------
+# Keys that say what a filament is, not how it prints: never taken from
+# another filament.
+_OWN = _META + ("filament_ids", "filament_vendor", "base_id", "compatible_printers", "compatible_prints", "compatible_printers_condition",
+                "compatible_prints_condition", "filament_settings_id", "is_custom_defined", "version", "user_id", "updated_time", "_system")
+CRASH_SIGNATURE = "empty vector"
+
+
+def _type_of(data):
+    t = data.get("filament_type")
+    t = t[0] if isinstance(t, list) and t else t
+    return str(t or "").strip().upper()
+
+
+def _printer_names(machine):
+    return [n for n in ((machine or {}).get("_system"), (machine or {}).get("name")) if n]
+
+
+def nearest_system(index, data, machine, exclude=()):
+    """The listed system filament preset nearest to a filament: the same
+    filament_type, made for the printer (its compatible_printers name it),
+    the most words of the name in common. None when there is none."""
+    want_type = _type_of(data)
+    printers = set(_printer_names(machine))
+    want = set(_norm(data.get("name")).replace("@", " ").split())
+    later = index.pop("_later", None)
+    if later:
+        _read(index, index.get("_slicer"), later)
+    scored = []
+    for name, entries in index["filament"].items():
+        e = entries[0]
+        if e["user"] or name in exclude:
+            continue
+        try:
+            with open(e["path"], encoding="utf-8") as f:
+                raw = json.load(f)
+        except Exception:
+            continue
+        if str(raw.get("instantiation", "true")).lower() == "false":
+            continue  # a base others inherit from (Bambu Studio's system ones are not listed in OrcaSlicer, but load)
+        cp = raw.get("compatible_printers")
+        if printers and not (isinstance(cp, list) and printers & set(cp)):
+            continue
+        try:
+            flat = resolve(index, "filament", name)
+        except PresetError:
+            continue
+        if want_type and _type_of(flat) != want_type:
+            continue
+        got = set(_norm(name).replace("@", " ").split())
+        generic = "generic" in got
+        scored.append((-len(want & got), not generic, name, flat))
+    scored.sort(key=lambda x: x[:3])
+    return (scored[0][2], scored[0][3]) if scored else None
+
+
+def per_variant_keys(ref):
+    """The keys of a flat filament that hold one value per extruder
+    variant (as long as its filament_extruder_variant list)."""
+    n = variant_count("filament", ref)
+    if n < 2:
+        return set()
+    return {k for k, v in ref.items() if isinstance(v, list) and len(v) == n and k not in _OWN}
+
+
+def fit_filament(data, ref, machine=None):
+    """A flat filament made whole for the printer, as the slicer's window
+    fills one in and its command line does not: each list it leaves out or
+    empty taken from ref (the nearest system filament for that printer, or
+    the printer's own default filament), each per-variant list as long as
+    the variant list (the person's last value repeated), and the variant
+    list itself at least as long as the printer's extruder count needs.
+    The person's own values are kept. Returns (data, filled keys)."""
+    out = dict(data)
+    filled = []
+    ref = {k: v for k, v in (ref or {}).items() if k not in _OWN}
+    keys = per_variant_keys(ref)
+    names = out.get("filament_extruder_variant")
+    rnames = ref.get("filament_extruder_variant")
+    n_machine = variant_count("machine", machine or {})
+    if isinstance(rnames, list) and rnames and (not isinstance(names, list) or not names or len(names) < len(rnames)):
+        # The person's variant names first, then the system one's missing.
+        have = list(names) if isinstance(names, list) else []
+        new = have + [x for x in rnames if x not in have]
+        old = len(have)
+        if old:
+            # Each per-variant list the person set is put in the new order
+            # (their last value for a variant they did not set).
+            for k in keys:
+                v = out.get(k)
+                if isinstance(v, list) and v and len(v) <= old:
+                    out[k] = list(v) + [v[-1]] * (len(new) - len(v))
+        out["filament_extruder_variant"] = new
+        filled.append("filament_extruder_variant")
+    n = max(variant_count("filament", out), 1)
+    if n < n_machine and isinstance(out.get("filament_extruder_variant"), list) and out["filament_extruder_variant"]:
+        v = out["filament_extruder_variant"]
+        out["filament_extruder_variant"] = list(v) + [v[-1]] * (n_machine - len(v))
+        n = n_machine
+    keys |= {k for k, v in out.items() if isinstance(v, list) and len(v) == n and n > 1 and k not in _OWN and k != "filament_extruder_variant"}
+    for k, rv in ref.items():
+        if not (isinstance(rv, list) and rv):
+            continue
+        v = out.get(k)
+        if not (isinstance(v, list) and v):
+            if k in keys or len(rv) == variant_count("filament", ref) > 1:
+                out[k] = (list(rv) + [rv[-1]] * n)[:n] if n > 1 else list(rv)
+            else:
+                out[k] = list(rv)
+            filled.append(k)
+    for k in keys:
+        v = out.get(k)
+        if isinstance(v, list) and v and len(v) < n:
+            out[k] = list(v) + [v[-1]] * (n - len(v))
+    return complete("filament", out), sorted(set(filled))
+
+
+def check_filament(data, ref=None):
+    """What would stop the command line in a flat filament: an empty list,
+    or a per-variant list shorter than its variant list. [] when none."""
+    bad = [f"{k} is empty" for k, v in data.items() if isinstance(v, list) and not v]
+    n = variant_count("filament", data)
+    if n > 1:
+        for k in sorted(per_variant_keys(ref or {}) | per_variant_keys(data)):
+            v = data.get(k)
+            if isinstance(v, list) and v and len(v) < n:
+                bad.append(f"{k} has {len(v)} of {n} values")
+    return bad
+
+
+def fit_bundle(index, out):
+    """The bundle's filament fitted to its printer (fit_filament): from the
+    nearest system filament of the same type, else the printer's default
+    filament. Puts {filled, problems, reference} under out["checked"] and
+    the nearest system filament's name under out["nearestSystem"]."""
+    f, m = out["filament"], out["machine"]
+    own = (index["filament"].get(f.get("name")) or [{"user": True}])[0]
+    if not own.get("user"):
+        return out  # a system preset (this slicer's or Bambu Studio's): whole as it is
+    if variant_count("machine", m) < 2 and variant_count("filament", f) < 2:
+        return out  # one extruder: the command line fills the rest as before
+    near = nearest_system(index, f, m)
+    ref, refname = (near[1], near[0]) if near else (None, None)
+    if ref is None:
+        d = m.get("default_filament_profile")
+        d = d[0] if isinstance(d, list) and d else d
+        if d:
+            try:
+                ref, refname = resolve(index, "filament", d), d
+            except PresetError:
+                ref = None
+    sysname = f.get("_system")
+    fixed, filled = fit_filament(f, ref, m)
+    fixed["_system"] = sysname
+    out["filament"] = fixed
+    out["checked"] = {"filled": filled, "problems": check_filament(fixed, ref), **({"reference": refname} if refname else {})}
+    if near:
+        out["nearestSystem"] = near[0]
+    return out
+
+
+def flatten_file(slicer, kind, path, folder_, machine=None):
     """A preset file given by path made ready for the command line: what it
     inherits merged in (looked up among the slicer's presets) and no empty
     list. The command line stops on a user preset file as the slicer saves
@@ -303,13 +464,19 @@ def flatten_file(slicer, kind, path, folder_):
     if not isinstance(data, dict):
         raise PresetError(f"{path}: not a preset (a JSON object).")
     empty = any(isinstance(v, list) and not v for v in data.values())
-    if not data.get("inherits") and not empty:
+    multi = kind == "filament" and variant_count("machine", machine or {}) > 1
+    if not data.get("inherits") and not empty and not multi:
         return path
     flat = {}
+    index = scan(slicer) if data.get("inherits") or multi else None
     if data.get("inherits"):
-        flat = resolve(scan(slicer), kind, data["inherits"])
+        flat = resolve(index, kind, data["inherits"])
         flat.pop("_system", None)
     flat = complete(kind, merge(kind, flat, {k: v for k, v in data.items() if k != "inherits"}))
+    if multi:
+        # A two-extruder printer: the filament made whole for it, as in a bundle.
+        b = fit_bundle(index, {"machine": machine, "filament": {**flat, "_system": None}})
+        flat = {k: v for k, v in b["filament"].items() if k != "_system"}
     flat["type"] = kind
     os.makedirs(folder_, exist_ok=True)
     out = os.path.join(folder_, f"agentlink-given-{kind}.json")
@@ -337,7 +504,22 @@ def bundle(slicer, machine, process, filament, name=None):
                                   + _hint(index, kind, machine))
             out.setdefault("defaulted", {})[kind] = n
         out[kind] = resolve(index, kind, n)
-    return out
+    return fit_bundle(index, out)
+
+
+def fallback_bundle(data):
+    """The bundle again with its filament swapped for the nearest system
+    filament of the same type for the printer, when its own filament made
+    the command line stop: (bundle, from, to), or None when there is none."""
+    name = data["filament"].get("name")
+    to = data.get("nearestSystem")
+    if not to or to == name:
+        return None
+    index = scan(data.get("slicer") or "orcaslicer")
+    new = dict(data)
+    new["filament"] = resolve(index, "filament", to)
+    new.pop("checked", None)
+    return new, name, to
 
 
 def near_by_words(index, kind, name, n=3):

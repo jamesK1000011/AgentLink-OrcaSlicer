@@ -1,0 +1,9 @@
+{
+ "type": "machine",
+ "name": "fdm_machine_common",
+ "instantiation": "false",
+ "gcode_flavor": "marlin",
+ "nozzle_diameter": [
+  "0.4"
+ ]
+}
