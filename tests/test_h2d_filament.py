@@ -127,5 +127,44 @@ class H2DFilament(unittest.TestCase):
             cli.make_project = real
 
 
+class BambuFilamentMap(unittest.TestCase):
+    def test_one_map_entry_per_filament(self):
+        """Bambu Studio on a two-nozzle printer: each filament loaded gets
+        its place in the filament map (one per body on the plate)."""
+        d = tempfile.mkdtemp()
+        prof = {}
+        for k, data in (("machine", {"nozzle_diameter": ["0.4", "0.4"], "default_nozzle_volume_type": ["Standard", "Standard"]}),
+                        ("process", {"layer_height": "0.2"}), ("filament", {"filament_type": ["PLA"]})):
+            prof[k] = os.path.join(d, k + ".json")
+            with open(prof[k], "w") as f:
+                json.dump(data, f)
+        stls = []
+        for n in ("a", "b"):
+            stls.append(os.path.join(d, n + ".stl"))
+            O.write_stl(stls[-1], M.box(5, 5, 5))
+        seen = []
+
+        class Run:
+            returncode, stdout, stderr = 1, "", "stopped"
+
+        def fake_run(args, timeout, cwd=None):
+            seen.append(args)
+            r = Run()
+            r.args = args
+            return r
+
+        real = (cli.find, cli._run)
+        cli.find, cli._run = (lambda name: "/bin/bambu-studio"), fake_run
+        try:
+            with self.assertRaises(RuntimeError):
+                cli._slice_with("bambustudio", stls, os.path.join(d, "x.gcode"), {}, prof)
+        finally:
+            cli.find, cli._run = real
+        args = seen[0]
+        self.assertEqual(args[args.index("--filament-map") + 1], "1,1")
+        self.assertEqual(args[args.index("--nozzle-volume-type") + 1], "Standard,Standard")
+        shutil.rmtree(d, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

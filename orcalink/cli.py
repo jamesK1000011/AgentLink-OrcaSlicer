@@ -204,7 +204,9 @@ def _slice_with(name, stl, gcode, settings, profiles=None, timeout=900, options=
         if kinds:
             # Each filament put on a nozzle by hand: left to itself the
             # command line reads past the end of its extruder list.
-            args += ["--nozzle-volume-type", ",".join(kinds), "--filament-map-mode", "Manual", "--filament-map", "1"]
+            # One entry per filament loaded (one per body): a shorter map
+            # leaves the later filaments on no extruder.
+            args += ["--nozzle-volume-type", ",".join(kinds), "--filament-map-mode", "Manual", "--filament-map", ",".join(["1"] * len(stls))]
     args += stls
     run = _run(args, timeout, cwd=out_dir)
     made = os.path.join(out_dir, "out.3mf")
