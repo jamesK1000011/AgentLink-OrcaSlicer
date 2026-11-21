@@ -73,7 +73,7 @@ class H2DFilament(unittest.TestCase):
         self.assertIsNone(SP.nearest_system(index, {"name": "x", "filament_type": ["PEEK"]}, {"name": PRINTER}))
 
     def test_given_file_fitted_to_the_given_printer(self):
-        src = os.path.join(DATA, "user", "1234", "filament", MINE.replace(" ", "_") + ".json")
+        src = os.path.join(DATA, "user", "1234", "filament", MINE.replace(" ", "_").replace("@", "at_") + ".json")
         machine = SP.resolve(SP.scan("orcaslicer"), "machine", PRINTER)
         out = SP.flatten_file("orcaslicer", "filament", src, os.path.join(self.tmp, "flat"), machine=machine)
         with open(out) as fh:
